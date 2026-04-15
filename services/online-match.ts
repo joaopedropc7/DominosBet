@@ -1,6 +1,9 @@
 import type { OnlineGameState, MatchRoomRow } from '@/types/database';
 import { supabase } from './supabase';
 
+export const ENTRY_FEE = 100;   // coins per player
+export const WINNER_REWARD = Math.round(ENTRY_FEE * 2 * 0.9); // 180 coins
+
 /** Find a waiting room or create a new one. Returns room_id and your role. */
 export async function joinMatchmaking(): Promise<{ roomId: string; role: 'p1' | 'p2' }> {
   const { data, error } = await supabase.rpc('join_matchmaking');
@@ -61,4 +64,24 @@ export async function fetchRoom(roomId: string): Promise<MatchRoomRow> {
     .single();
   if (error) throw new Error(error.message);
   return data;
+}
+
+/** Resolve finished match: credit winner, save match_history, update profiles. */
+export async function resolveOnlineMatch(
+  roomId: string,
+  winnerId: string | null,  // null = draw
+  durationSeconds: number,
+  p1Pips: number,
+  p2Pips: number,
+): Promise<{ winnerReward: number; loserReward: number }> {
+  const { data, error } = await supabase.rpc('resolve_online_match', {
+    room_id: roomId,
+    winner_id: winnerId,
+    duration_seconds: durationSeconds,
+    p1_pips: p1Pips,
+    p2_pips: p2Pips,
+  });
+  if (error) throw new Error(error.message);
+  const result = data as { winner_reward: number; loser_reward: number };
+  return { winnerReward: result.winner_reward, loserReward: result.loser_reward };
 }

@@ -160,6 +160,11 @@ export interface Database {
           current_turn_id: string | null;
           game_state: OnlineGameState | Record<string, never>;
           winner_id: string | null;
+          entry_fee: number;
+          pot: number;
+          bet_placed: boolean;
+          started_at: string | null;
+          finished_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -171,6 +176,11 @@ export interface Database {
           current_turn_id?: string | null;
           game_state?: OnlineGameState | Record<string, never>;
           winner_id?: string | null;
+          entry_fee?: number;
+          pot?: number;
+          bet_placed?: boolean;
+          started_at?: string | null;
+          finished_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -243,6 +253,10 @@ export interface Database {
       leave_matchmaking: {
         Args: { room_id: string };
         Returns: undefined;
+      };
+      resolve_online_match: {
+        Args: { room_id: string; winner_id: string | null; duration_seconds: number; p1_pips: number; p2_pips: number };
+        Returns: { winner_reward: number; loser_reward: number };
       };
     };
     Enums: Record<string, never>;

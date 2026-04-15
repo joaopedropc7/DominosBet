@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { Alert } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Card } from '@/components/base/Card';
@@ -6,6 +7,7 @@ import { Screen } from '@/components/base/Screen';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useUserData } from '@/hooks/useUserData';
+import { ENTRY_FEE } from '@/services/online-match';
 import { theme } from '@/theme';
 import { formatCoins } from '@/utils/format';
 
@@ -26,18 +28,33 @@ export function MatchSelectionScreenView() {
   const { isPhone, isCompact } = useResponsive();
   const { profile } = useUserData();
 
+  const balance = profile?.balance ?? 0;
+  const hasBalance = balance >= ENTRY_FEE;
+
+  function handleOnlinePress() {
+    if (!hasBalance) {
+      Alert.alert(
+        'Saldo insuficiente',
+        `Você precisa de ${formatCoins(ENTRY_FEE)} moedas para entrar. Seu saldo: ${formatCoins(balance)} moedas.`,
+        [{ text: 'OK' }],
+      );
+      return;
+    }
+    router.push('/(main)/busca-partida');
+  }
+
   const modes: MatchMode[] = [
     {
       id: 'online',
       eyebrow: '1v1 Online',
       eyebrowAccent: true,
       title: 'Arena Online',
-      description: 'Jogue contra outros jogadores reais em tempo real.',
+      description: `Entrada: ${formatCoins(ENTRY_FEE)} moedas · Prêmio: ${formatCoins(Math.round(ENTRY_FEE * 2 * 0.9))} moedas`,
       badge: 'Ao vivo',
       badgeAccent: true,
       icon: 'account-group',
-      cta: 'Buscar partida',
-      onPress: () => router.push('/(main)/busca-partida'),
+      cta: hasBalance ? 'Buscar partida' : 'Saldo insuficiente',
+      onPress: handleOnlinePress,
     },
     {
       id: 'bot',
@@ -102,7 +119,8 @@ export function MatchSelectionScreenView() {
                 onPress={mode.onPress}
                 style={({ pressed }) => [
                   styles.ctaBtn,
-                  mode.eyebrowAccent && styles.ctaBtnAccent,
+                  mode.eyebrowAccent && hasBalance && styles.ctaBtnAccent,
+                  mode.eyebrowAccent && !hasBalance && styles.ctaBtnDisabled,
                   pressed && { opacity: 0.85 },
                 ]}
               >
@@ -213,6 +231,11 @@ const styles = StyleSheet.create({
   ctaBtnAccent: {
     backgroundColor: theme.colors.primary,
     borderColor: 'transparent',
+  },
+  ctaBtnDisabled: {
+    backgroundColor: theme.colors.surfaceHigh,
+    borderColor: theme.colors.outline,
+    opacity: 0.6,
   },
   ctaBtnText: {
     color: '#241A00',
