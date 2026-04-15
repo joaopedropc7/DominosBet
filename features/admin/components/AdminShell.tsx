@@ -39,7 +39,7 @@ export function AdminShell({ children }: PropsWithChildren) {
           </View>
           <View>
             <Text style={styles.brandTitle}>Admin</Text>
-            <Text style={styles.brandSub}>xdomino</Text>
+            <Text style={styles.brandSub}>Dominos Bet</Text>
           </View>
         </View>
 

@@ -1,6 +1,6 @@
 import type { BottomNavItem } from '@/types/app';
 
-export const APP_NAME = 'xDominó';
+export const APP_NAME = 'Dominos Bet';
 export const APP_TAGLINE = 'The Underground Arena';
 
 // Central route metadata keeps bottom navigation and future deep links aligned.

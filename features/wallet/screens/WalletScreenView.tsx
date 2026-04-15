@@ -89,7 +89,7 @@ export function WalletScreenView() {
         <View style={styles.promo}>
           <Text style={styles.promoTitle}>Dobre suas vitórias</Text>
           <Text style={styles.promoDescription}>
-            Assine o Clube xDominó e receba bônus de 20% em cada partida vencida.
+            Assine o Clube Dominos Bet e receba bônus de 20% em cada partida vencida.
           </Text>
           <Button title="Saber mais" variant="ghost" fullWidth={false} />
         </View>

@@ -39,7 +39,7 @@ export function HomeScreenView() {
           <ModeCard
             key={mode.id}
             mode={mode}
-            onPress={() => router.push(mode.id === 'duelo' ? '/(main)/jogo-bot' : mode.id === '4p' ? '/(main)/jogo-4p' : '/(main)/busca-partida')}
+            onPress={() => router.push(mode.id === 'duelo' ? '/(main)/selecao-partida' : mode.id === '4p' ? '/(main)/jogo-4p' : '/(main)/busca-partida')}
           />
         ))}
       </View>
