@@ -79,11 +79,11 @@ export function OnlineMatchScreenView({
     prevPhase.current = phase;
   }, [phase, game]);
 
-  // ── Pass-turn toast animation ─────────────────────────────────────────────
-  const [passToastMsg, setPassToastMsg] = useState('');
-  const [showPassToast, setShowPassToast] = useState(false);
-  const passToastY = useRef(new Animated.Value(-60)).current;
-  const passToastOpacity = useRef(new Animated.Value(0)).current;
+  // ── Pass-turn popup animation ─────────────────────────────────────────────
+  const [passPopupName, setPassPopupName] = useState('');
+  const [showPassPopup, setShowPassPopup] = useState(false);
+  const passPopupOpacity = useRef(new Animated.Value(0)).current;
+  const passPopupScale = useRef(new Animated.Value(0.75)).current;
   const lastLogIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -91,22 +91,22 @@ export function OnlineMatchScreenView({
     const latest = game.log[0];
     if (!latest || latest.id === lastLogIdRef.current) return;
     lastLogIdRef.current = latest.id;
-    if (!latest.message.includes('passou a vez')) return;
+    if (!latest.message.includes('ficou sem jogadas')) return;
 
-    setPassToastMsg(latest.message);
-    setShowPassToast(true);
-    passToastY.setValue(-60);
-    passToastOpacity.setValue(0);
+    // Extract player name from "X ficou sem jogadas."
+    const name = latest.message.replace(' ficou sem jogadas.', '');
+    setPassPopupName(name);
+    setShowPassPopup(true);
+    passPopupOpacity.setValue(0);
+    passPopupScale.setValue(0.75);
 
     Animated.parallel([
-      Animated.spring(passToastY, { toValue: 0, friction: 7, tension: 90, useNativeDriver: true }),
-      Animated.timing(passToastOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.spring(passPopupScale, { toValue: 1, friction: 6, tension: 100, useNativeDriver: true }),
+      Animated.timing(passPopupOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
     ]).start(() => {
       setTimeout(() => {
-        Animated.parallel([
-          Animated.timing(passToastY, { toValue: -60, duration: 300, useNativeDriver: true }),
-          Animated.timing(passToastOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
-        ]).start(() => setShowPassToast(false));
+        Animated.timing(passPopupOpacity, { toValue: 0, duration: 300, useNativeDriver: true })
+          .start(() => setShowPassPopup(false));
       }, 2000);
     });
   }, [game?.log]);
@@ -270,13 +270,6 @@ export function OnlineMatchScreenView({
           </View>
         </View>
 
-        {/* Pass-turn toast */}
-        {showPassToast && (
-          <Animated.View style={[styles.passToast, { transform: [{ translateY: passToastY }], opacity: passToastOpacity }]}>
-            <MaterialCommunityIcons name="hand-back-right-outline" size={16} color={theme.colors.textSoft} />
-            <Text style={styles.passToastText}>{passToastMsg}</Text>
-          </Animated.View>
-        )}
 
         {/* Opponent zone */}
         <View style={styles.opponentZone}>
@@ -395,6 +388,17 @@ export function OnlineMatchScreenView({
         </View>
       </View>
 
+      {/* ── Pass popup ───────────────────────────────────────────────────── */}
+      {showPassPopup && (
+        <Animated.View style={[styles.passPopupOverlay, { opacity: passPopupOpacity }]}>
+          <Animated.View style={[styles.passPopupCard, { transform: [{ scale: passPopupScale }] }]}>
+            <MaterialCommunityIcons name="hand-back-right-outline" size={36} color={theme.colors.textMuted} />
+            <Text style={styles.passPopupName}>{passPopupName}</Text>
+            <Text style={styles.passPopupLabel}>ficou sem jogadas</Text>
+          </Animated.View>
+        </Animated.View>
+      )}
+
       {/* ── Opener overlay (who goes first) ──────────────────────────────── */}
       {showOpener && game && (
         <Animated.View style={[styles.openerOverlay, { opacity: openerOpacity }]}>
@@ -476,7 +480,10 @@ export function OnlineMatchScreenView({
 
               <View style={styles.resultActions}>
                 <Pressable
-                  onPress={() => router.replace('/(main)/busca-partida')}
+                  onPress={() => router.replace({
+                    pathname: '/(main)/busca-partida',
+                    params: { mode: game?.mode ?? 'classic' },
+                  } as any)}
                   style={({ pressed }) => [styles.resultButton, styles.resultButtonPrimary, pressed && styles.resultButtonPressed]}
                 >
                   <Text style={styles.resultButtonTextDark}>Jogar novamente</Text>
@@ -596,9 +603,11 @@ const styles = StyleSheet.create({
   drawBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.colors.primary, borderRadius: theme.radius.lg, paddingVertical: 12, marginTop: theme.spacing.xs },
   drawBtnText: { color: '#241A00', fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 14 },
 
-  // Pass-turn toast
-  passToast: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'center', backgroundColor: theme.colors.surface, borderRadius: theme.radius.pill, paddingHorizontal: 16, paddingVertical: 9, borderWidth: 1, borderColor: theme.colors.outline, marginBottom: theme.spacing.xs, zIndex: 5 },
-  passToastText: { color: theme.colors.textSoft, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 13 },
+  // Pass popup
+  passPopupOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', zIndex: 15, pointerEvents: 'none' },
+  passPopupCard: { backgroundColor: theme.colors.surface, borderRadius: 20, borderWidth: 1, borderColor: theme.colors.outline, paddingHorizontal: 36, paddingVertical: 24, alignItems: 'center', gap: 8, minWidth: 200, shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 16, elevation: 8 },
+  passPopupName: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.display, fontSize: 22, textAlign: 'center' },
+  passPopupLabel: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 13 },
 
   // Opener overlay
   openerOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center', zIndex: 20 },
