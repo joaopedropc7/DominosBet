@@ -16,9 +16,15 @@ export interface FriendRequestPayload {
   friendship_id: string;
 }
 
+export interface FriendAcceptedPayload {
+  friend_id: string;
+  friend_name: string;
+}
+
 export type AppNotification =
-  | { id: string; user_id: string; type: 'room_invite';    payload: RoomInvitePayload;    read: boolean; created_at: string }
-  | { id: string; user_id: string; type: 'friend_request'; payload: FriendRequestPayload; read: boolean; created_at: string };
+  | { id: string; user_id: string; type: 'room_invite';     payload: RoomInvitePayload;     read: boolean; created_at: string }
+  | { id: string; user_id: string; type: 'friend_request';  payload: FriendRequestPayload;  read: boolean; created_at: string }
+  | { id: string; user_id: string; type: 'friend_accepted'; payload: FriendAcceptedPayload; read: boolean; created_at: string };
 
 /** List unread notifications for the current user. */
 export async function listNotifications(): Promise<AppNotification[]> {

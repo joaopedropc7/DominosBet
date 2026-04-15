@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Avatar } from '@/components/base/Avatar';
 import { Card } from '@/components/base/Card';
 import { Screen } from '@/components/base/Screen';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -54,7 +53,7 @@ export function NotificationsScreenView() {
       ) : (
         <View style={styles.list}>
           {notifications.map(n => (
-            <NotificationCard key={n.id} notification={n} onDismiss={() => dismiss(n.id)} />
+            <NotificationCard key={n.id} notification={n} onDismiss={() => dismiss(n.id)} onReload={load} />
           ))}
         </View>
       )}
@@ -65,11 +64,14 @@ export function NotificationsScreenView() {
 function NotificationCard({
   notification,
   onDismiss,
+  onReload,
 }: {
   notification: AppNotification;
   onDismiss: () => void;
+  onReload: () => void;
 }) {
   const [acting, setActing] = useState(false);
+  const [error, setError]   = useState<string | null>(null);
 
   if (notification.type === 'room_invite') {
     const p = notification.payload;
@@ -109,18 +111,29 @@ function NotificationCard({
 
     async function handleAccept() {
       setActing(true);
+      setError(null);
       try {
         await acceptFriendRequest(p.friendship_id);
         onDismiss();
-      } catch { } finally { setActing(false); }
+        onReload();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Erro ao aceitar.');
+      } finally {
+        setActing(false);
+      }
     }
 
     async function handleDecline() {
       setActing(true);
+      setError(null);
       try {
         await removeFriendship(p.friendship_id);
         onDismiss();
-      } catch { } finally { setActing(false); }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Erro ao recusar.');
+      } finally {
+        setActing(false);
+      }
     }
 
     return (
@@ -137,6 +150,7 @@ function NotificationCard({
             <Text style={styles.time}>{formatTimelineLabel(notification.created_at)}</Text>
           </View>
         </View>
+        {error && <Text style={styles.errorText}>{error}</Text>}
         <View style={styles.twoBtn}>
           <Pressable
             onPress={handleAccept}
@@ -157,6 +171,27 @@ function NotificationCard({
           >
             <Text style={styles.ghostBtnText}>Recusar</Text>
           </Pressable>
+        </View>
+      </Card>
+    );
+  }
+
+  if (notification.type === 'friend_accepted') {
+    const p = notification.payload;
+    return (
+      <Card variant="low">
+        <View style={styles.row}>
+          <View style={[styles.iconWrap, styles.iconAccepted]}>
+            <MaterialCommunityIcons name="account-check-outline" size={22} color={theme.colors.primary} />
+          </View>
+          <View style={styles.body}>
+            <Text style={styles.title}>
+              {'Você e '}
+              <Text style={styles.bold}>{p.friend_name}</Text>
+              {' agora são amigos!'}
+            </Text>
+            <Text style={styles.time}>{formatTimelineLabel(notification.created_at)}</Text>
+          </View>
         </View>
       </Card>
     );
@@ -194,8 +229,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconInvite: { backgroundColor: theme.colors.primarySoft },
-  iconFriend: { backgroundColor: 'rgba(100,200,255,0.12)' },
+  iconInvite:   { backgroundColor: theme.colors.primarySoft },
+  iconFriend:   { backgroundColor: 'rgba(100,200,255,0.12)' },
+  iconAccepted: { backgroundColor: theme.colors.primarySoft },
+
+  errorText: {
+    color: theme.colors.danger,
+    fontFamily: theme.typography.fontFamily.bodyMedium,
+    fontSize: 12,
+    marginBottom: theme.spacing.xs,
+  },
 
   body: { flex: 1, gap: 2 },
   title: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 14 },
