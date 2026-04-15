@@ -482,7 +482,10 @@ export function OnlineMatchScreenView({
                 <Pressable
                   onPress={() => router.replace({
                     pathname: '/(main)/busca-partida',
-                    params: { mode: game?.mode ?? 'classic' },
+                    params: {
+                      mode: game?.mode ?? 'classic',
+                      entryFee: String(room?.entry_fee ?? 20),
+                    },
                   } as any)}
                   style={({ pressed }) => [styles.resultButton, styles.resultButtonPrimary, pressed && styles.resultButtonPressed]}
                 >

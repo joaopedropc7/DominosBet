@@ -7,7 +7,8 @@ import { Screen } from '@/components/base/Screen';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useUserData } from '@/hooks/useUserData';
-import { joinMatchmaking, leaveMatchmaking } from '@/services/online-match';
+import { joinMatchmaking, leaveMatchmaking, calcPrize } from '@/services/online-match';
+import { formatCoins } from '@/utils/format';
 import { supabase } from '@/services/supabase';
 import { theme } from '@/theme';
 import type { MatchRoomRow } from '@/types/database';
@@ -16,9 +17,10 @@ type SearchPhase = 'joining' | 'waiting' | 'found' | 'error';
 
 interface MatchSearchScreenViewProps {
   mode: 'classic' | 'express';
+  entryFee: number;
 }
 
-export function MatchSearchScreenView({ mode }: MatchSearchScreenViewProps) {
+export function MatchSearchScreenView({ mode, entryFee }: MatchSearchScreenViewProps) {
   const { isCompact } = useResponsive();
   const { profile } = useUserData();
   const [phase, setPhase] = useState<SearchPhase>('joining');
@@ -32,7 +34,7 @@ export function MatchSearchScreenView({ mode }: MatchSearchScreenViewProps) {
 
     async function startMatchmaking() {
       try {
-        const { roomId, role } = await joinMatchmaking(mode);
+        const { roomId, role } = await joinMatchmaking(mode, entryFee);
         if (!mounted) return;
         roomIdRef.current = roomId;
         roleRef.current = role;
@@ -142,7 +144,7 @@ export function MatchSearchScreenView({ mode }: MatchSearchScreenViewProps) {
             <>
               <Text style={[styles.title, isCompact && styles.titleCompact]}>Procurando adversário…</Text>
               <Text style={styles.subtitle}>
-                {mode === 'classic' ? 'Modo: Clássico — com monte' : 'Modo: Expresso — sem monte'}
+                {mode === 'classic' ? 'Clássico' : 'Expresso'} · {formatCoins(entryFee)} entrada · {formatCoins(calcPrize(entryFee))} prêmio
               </Text>
             </>
           )}
