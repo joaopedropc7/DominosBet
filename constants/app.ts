@@ -9,5 +9,5 @@ export const bottomNavItems: BottomNavItem[] = [
   { label: 'Salas',   icon: 'door-open',        href: '/(main)/salas',     matchers: ['/salas', '/(main)/salas', '/criar-sala', '/(main)/criar-sala', '/sala-privada', '/(main)/sala-privada'] },
   { label: 'Carteira', icon: 'wallet-outline',   href: '/(main)/carteira',  matchers: ['/carteira', '/(main)/carteira'] },
   { label: 'Perfil',  icon: 'account-outline',  href: '/(main)/perfil',    matchers: ['/perfil', '/(main)/perfil', '/editar-perfil', '/(main)/editar-perfil'] },
-  { label: 'Alertas', icon: 'bell-outline',      href: '/(main)/resultado', matchers: ['/resultado', '/(main)/resultado'] },
+  { label: 'Alertas', icon: 'bell-outline',      href: '/(main)/notificacoes', matchers: ['/notificacoes', '/(main)/notificacoes'] },
 ];

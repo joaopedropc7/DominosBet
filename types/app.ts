@@ -3,7 +3,7 @@ import type { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
-export type NavRoute = '/(main)/home' | '/(main)/salas' | '/(main)/carteira' | '/(main)/perfil' | '/(main)/resultado';
+export type NavRoute = '/(main)/home' | '/(main)/salas' | '/(main)/carteira' | '/(main)/perfil' | '/(main)/notificacoes';
 
 export interface BottomNavItem {
   label: string;

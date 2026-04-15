@@ -38,12 +38,8 @@ export function NotificationsScreenView() {
   }
 
   return (
-    <Screen>
-      <AppHeader
-        title="Notificações"
-        rightIcon="arrow-left"
-        onRightPress={() => router.back()}
-      />
+    <Screen withBottomNav>
+      <AppHeader title="Notificações" />
 
       {loading ? (
         <View style={styles.center}>

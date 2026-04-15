@@ -3,7 +3,6 @@ import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -31,6 +30,8 @@ export function RoomsScreenView() {
   const [loading, setLoading]           = useState(true);
   const [refreshing, setRefreshing]     = useState(false);
   const [joinCode, setJoinCode]         = useState('');
+  const [cancelingId, setCancelingId]   = useState<string | null>(null);
+  const [cancelLoading, setCancelLoading] = useState(false);
 
   const loadAll = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -52,21 +53,16 @@ export function RoomsScreenView() {
   useEffect(() => { loadAll(); }, [loadAll]);
 
   async function handleCancel(roomId: string) {
-    Alert.alert('Cancelar sala', 'Tem certeza que deseja cancelar esta sala?', [
-      { text: 'Não', style: 'cancel' },
-      {
-        text: 'Cancelar sala',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await cancelPrivateRoom(roomId);
-            setMyRooms((prev) => prev.filter((r) => r.room_id !== roomId));
-          } catch (e) {
-            Alert.alert('Erro', e instanceof Error ? e.message : 'Não foi possível cancelar.');
-          }
-        },
-      },
-    ]);
+    setCancelLoading(true);
+    try {
+      await cancelPrivateRoom(roomId);
+      setMyRooms((prev) => prev.filter((r) => r.room_id !== roomId));
+    } catch {
+      // ignore — room stays in list
+    } finally {
+      setCancelLoading(false);
+      setCancelingId(null);
+    }
   }
 
   function handleJoinByCode() {
@@ -175,44 +171,72 @@ export function RoomsScreenView() {
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Minhas salas abertas</Text>
                 <View style={styles.roomList}>
-                  {myRooms.map((room) => (
-                    <Card key={room.room_id} variant="low">
-                      <View style={styles.roomRow}>
-                        <View style={styles.roomInfo}>
-                          <View style={styles.roomTitleRow}>
-                            <Text style={styles.roomName}>
-                              {room.room_name ?? `Sala ${room.invite_code}`}
+                  {myRooms.map((room) => {
+                    const confirming = cancelingId === room.room_id;
+                    return (
+                      <Card key={room.room_id} variant="low">
+                        <View style={styles.roomRow}>
+                          <View style={styles.roomInfo}>
+                            <View style={styles.roomTitleRow}>
+                              <Text style={styles.roomName}>
+                                {room.room_name ?? `Sala ${room.invite_code}`}
+                              </Text>
+                              {room.has_password && (
+                                <MaterialCommunityIcons name="lock" size={13} color={theme.colors.textFaint} />
+                              )}
+                            </View>
+                            <Text style={styles.roomMeta}>
+                              Entrada: {formatCoins(room.entry_fee)} · Prêmio: {formatCoins(Math.round(room.entry_fee * 2 * 0.9))}
                             </Text>
-                            {room.has_password && (
-                              <MaterialCommunityIcons name="lock" size={13} color={theme.colors.textFaint} />
-                            )}
                           </View>
-                          <Text style={styles.roomMeta}>
-                            Entrada: {formatCoins(room.entry_fee)} · Prêmio: {formatCoins(Math.round(room.entry_fee * 2 * 0.9))}
-                          </Text>
+                          <View style={styles.roomRight}>
+                            <View style={styles.codeBadge}>
+                              <Text style={styles.codeText}>{room.invite_code}</Text>
+                            </View>
+                            <View style={styles.roomBtns}>
+                              {!confirming && (
+                                <Pressable
+                                  onPress={() => router.push({ pathname: '/(main)/sala-privada', params: { roomId: room.room_id, inviteCode: room.invite_code, entryFee: String(room.entry_fee), roomName: room.room_name ?? '' } } as any)}
+                                  style={({ pressed }) => [styles.roomBtn, pressed && { opacity: 0.7 }]}
+                                >
+                                  <MaterialCommunityIcons name="eye-outline" size={15} color={theme.colors.accent} />
+                                </Pressable>
+                              )}
+                              {confirming ? (
+                                <>
+                                  <Pressable
+                                    onPress={() => handleCancel(room.room_id)}
+                                    disabled={cancelLoading}
+                                    style={({ pressed }) => [styles.roomBtn, styles.roomBtnDanger, pressed && { opacity: 0.7 }]}
+                                  >
+                                    {cancelLoading
+                                      ? <ActivityIndicator size="small" color={theme.colors.danger} />
+                                      : <MaterialCommunityIcons name="check" size={15} color={theme.colors.danger} />}
+                                  </Pressable>
+                                  <Pressable
+                                    onPress={() => setCancelingId(null)}
+                                    style={({ pressed }) => [styles.roomBtn, pressed && { opacity: 0.7 }]}
+                                  >
+                                    <MaterialCommunityIcons name="close" size={15} color={theme.colors.textFaint} />
+                                  </Pressable>
+                                </>
+                              ) : (
+                                <Pressable
+                                  onPress={() => setCancelingId(room.room_id)}
+                                  style={({ pressed }) => [styles.roomBtn, pressed && { opacity: 0.7 }]}
+                                >
+                                  <MaterialCommunityIcons name="delete-outline" size={15} color={theme.colors.danger} />
+                                </Pressable>
+                              )}
+                            </View>
+                          </View>
                         </View>
-                        <View style={styles.roomRight}>
-                          <View style={styles.codeBadge}>
-                            <Text style={styles.codeText}>{room.invite_code}</Text>
-                          </View>
-                          <View style={styles.roomBtns}>
-                            <Pressable
-                              onPress={() => router.push({ pathname: '/(main)/sala-privada', params: { roomId: room.room_id, inviteCode: room.invite_code, entryFee: String(room.entry_fee), roomName: room.room_name ?? '' } } as any)}
-                              style={({ pressed }) => [styles.roomBtn, pressed && { opacity: 0.7 }]}
-                            >
-                              <MaterialCommunityIcons name="eye-outline" size={15} color={theme.colors.accent} />
-                            </Pressable>
-                            <Pressable
-                              onPress={() => handleCancel(room.room_id)}
-                              style={({ pressed }) => [styles.roomBtn, pressed && { opacity: 0.7 }]}
-                            >
-                              <MaterialCommunityIcons name="close" size={15} color={theme.colors.danger} />
-                            </Pressable>
-                          </View>
-                        </View>
-                      </View>
-                    </Card>
-                  ))}
+                        {confirming && (
+                          <Text style={styles.confirmText}>Excluir esta sala permanentemente?</Text>
+                        )}
+                      </Card>
+                    );
+                  })}
                 </View>
               </View>
             )}
@@ -378,6 +402,14 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceHigh,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: theme.colors.outline,
+  },
+  roomBtnDanger: { borderColor: theme.colors.danger },
+  confirmText: {
+    color: theme.colors.danger,
+    fontFamily: theme.typography.fontFamily.bodyMedium,
+    fontSize: 12,
+    marginTop: theme.spacing.xs,
+    textAlign: 'right',
   },
 
   // Available rooms
