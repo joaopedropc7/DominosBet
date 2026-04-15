@@ -17,6 +17,18 @@ export interface ActiveRoomData {
   created_at: string;
 }
 
+export interface AvailableRoomData {
+  room_id: string;
+  room_name: string | null;
+  entry_fee: number;
+  invite_code: string;
+  mode: 'classic' | 'express';
+  has_password: boolean;
+  created_at: string;
+  creator_name: string;
+  creator_avatar_id: string;
+}
+
 /** Create a private room. Returns room_id and invite_code. */
 export async function createPrivateRoom(
   entryFee: number,
@@ -63,6 +75,13 @@ export async function getMyActiveRooms(): Promise<ActiveRoomData[]> {
   const { data, error } = await supabase.rpc('get_my_active_rooms');
   if (error) throw new Error(error.message);
   return (data as ActiveRoomData[]) ?? [];
+}
+
+/** List all available waiting private rooms (excluding current user's own). */
+export async function listAvailableRooms(): Promise<AvailableRoomData[]> {
+  const { data, error } = await supabase.rpc('list_available_rooms');
+  if (error) throw new Error(error.message);
+  return (data as AvailableRoomData[]) ?? [];
 }
 
 /** Cancel a waiting private room created by me. */
