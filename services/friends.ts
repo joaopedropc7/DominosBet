@@ -10,10 +10,41 @@ export async function findProfileByNickname(nickname: string): Promise<ProfileRo
 
 /** Send a friend request to a user by their profile id (also creates a notification) */
 export async function sendFriendRequest(addresseeId: string): Promise<void> {
-  const { error } = await supabase.rpc('send_friend_request', {
-    p_addressee_id: addresseeId,
-  });
-  if (error) throw new Error(error.message);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Não autenticado.');
+
+  // Create the friendship
+  const { data: friendship, error } = await supabase
+    .from('friendships')
+    .insert({ requester_id: user.id, addressee_id: addresseeId })
+    .select('id')
+    .single();
+
+  if (error) {
+    if (error.code === '23505') throw new Error('Solicitação já enviada.');
+    throw new Error(error.message);
+  }
+
+  // Send a notification to the addressee (best-effort — doesn't fail if table is missing)
+  try {
+    const { data: me } = await supabase
+      .from('profiles')
+      .select('display_name')
+      .eq('id', user.id)
+      .single();
+
+    if (me && friendship) {
+      await supabase.from('notifications').insert({
+        user_id: addresseeId,
+        type: 'friend_request',
+        payload: {
+          requester_id: user.id,
+          requester_name: me.display_name,
+          friendship_id: friendship.id,
+        },
+      });
+    }
+  } catch { /* notifications are best-effort */ }
 }
 
 /** Accept a pending friend request (also marks the notification as read) */
@@ -43,24 +74,29 @@ export async function listFriends(userId: string): Promise<FriendEntry[]> {
 
   if (error) throw error;
 
-  return (rows ?? []).map((row: any) => {
-    const iAmRequester = row.requester_id === userId;
-    const friendProfile: ProfileRow = iAmRequester ? row.addressee : row.requester;
+  return (rows ?? [])
+    .map((row: any) => {
+      const iAmRequester = row.requester_id === userId;
+      const friendProfile: ProfileRow | null = iAmRequester ? row.addressee : row.requester;
 
-    let status: FriendEntry['status'];
-    if (row.status === 'accepted') {
-      status = 'accepted';
-    } else if (iAmRequester) {
-      status = 'pending_sent';
-    } else {
-      status = 'pending_received';
-    }
+      // Skip rows where the joined profile is null (RLS or orphaned FK)
+      if (!friendProfile) return null;
 
-    return {
-      friendshipId: row.id,
-      profile: friendProfile,
-      status,
-      createdAt: row.created_at,
-    } satisfies FriendEntry;
-  });
+      let status: FriendEntry['status'];
+      if (row.status === 'accepted') {
+        status = 'accepted';
+      } else if (iAmRequester) {
+        status = 'pending_sent';
+      } else {
+        status = 'pending_received';
+      }
+
+      return {
+        friendshipId: row.id,
+        profile: friendProfile,
+        status,
+        createdAt: row.created_at,
+      } satisfies FriendEntry;
+    })
+    .filter((e): e is FriendEntry => e !== null);
 }

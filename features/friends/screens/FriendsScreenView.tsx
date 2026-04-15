@@ -283,6 +283,7 @@ function FriendCard({
   onRemove: () => void;
 }) {
   const { profile, status } = entry;
+  if (!profile) return null;
   return (
     <View style={styles.card}>
       <Avatar avatarId={profile.avatar_id} size={44} />
