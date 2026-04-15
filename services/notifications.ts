@@ -31,6 +31,7 @@ export async function listNotifications(): Promise<AppNotification[]> {
   const { data, error } = await supabase
     .from('notifications')
     .select('*')
+    .eq('read', false)
     .order('created_at', { ascending: false })
     .limit(50);
   if (error) throw new Error(error.message);

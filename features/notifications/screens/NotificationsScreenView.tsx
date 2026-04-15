@@ -53,7 +53,7 @@ export function NotificationsScreenView() {
       ) : (
         <View style={styles.list}>
           {notifications.map(n => (
-            <NotificationCard key={n.id} notification={n} onDismiss={() => dismiss(n.id)} onReload={load} />
+            <NotificationCard key={n.id} notification={n} onDismiss={() => dismiss(n.id)} />
           ))}
         </View>
       )}
@@ -64,11 +64,9 @@ export function NotificationsScreenView() {
 function NotificationCard({
   notification,
   onDismiss,
-  onReload,
 }: {
   notification: AppNotification;
   onDismiss: () => void;
-  onReload: () => void;
 }) {
   const [acting, setActing] = useState(false);
   const [error, setError]   = useState<string | null>(null);
@@ -115,7 +113,6 @@ function NotificationCard({
       try {
         await acceptFriendRequest(p.friendship_id);
         onDismiss();
-        onReload();
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Erro ao aceitar.');
       } finally {

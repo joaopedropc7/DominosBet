@@ -16,21 +16,20 @@ DECLARE
   v_acceptor_name  text;
   v_requester_name text;
 BEGIN
-  IF v_user_id IS NULL THEN RAISE EXCEPTION 'Não autenticado.'; END IF;
+  IF v_user_id IS NULL THEN RETURN; END IF;
 
-  -- Accept the friendship; only the addressee is allowed to accept
+  -- Accept the friendship (addressee only, must still be pending)
   UPDATE public.friendships
   SET    status = 'accepted'
-  WHERE  id            = p_friendship_id
-    AND  addressee_id  = v_user_id
-    AND  status        = 'pending'
+  WHERE  id           = p_friendship_id
+    AND  addressee_id = v_user_id
+    AND  status       = 'pending'
   RETURNING requester_id INTO v_requester_id;
 
-  IF v_requester_id IS NULL THEN
-    RAISE EXCEPTION 'Solicitação não encontrada ou já processada.';
-  END IF;
+  -- Nothing to do (already accepted or not found)
+  IF v_requester_id IS NULL THEN RETURN; END IF;
 
-  -- Mark the incoming friend_request notification as read for the acceptor
+  -- Mark the incoming friend_request notification as read
   UPDATE public.notifications
   SET    read = true
   WHERE  user_id = v_user_id
@@ -41,26 +40,20 @@ BEGIN
   SELECT display_name INTO v_acceptor_name  FROM public.profiles WHERE id = v_user_id;
   SELECT display_name INTO v_requester_name FROM public.profiles WHERE id = v_requester_id;
 
-  -- Notify the requester: their request was accepted
+  -- Notify requester: request was accepted
   INSERT INTO public.notifications (user_id, type, payload)
   VALUES (
     v_requester_id,
     'friend_accepted',
-    json_build_object(
-      'friend_id',   v_user_id::text,
-      'friend_name', v_acceptor_name
-    )
+    json_build_object('friend_id', v_user_id::text, 'friend_name', v_acceptor_name)
   );
 
-  -- Notify the acceptor: confirm you are now friends
+  -- Notify acceptor: confirm friendship
   INSERT INTO public.notifications (user_id, type, payload)
   VALUES (
     v_user_id,
     'friend_accepted',
-    json_build_object(
-      'friend_id',   v_requester_id::text,
-      'friend_name', v_requester_name
-    )
+    json_build_object('friend_id', v_requester_id::text, 'friend_name', v_requester_name)
   );
 END;
 $$;
