@@ -3,19 +3,14 @@ import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   Alert,
+  Animated,
+  Easing,
   Pressable,
   Share,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { cancelPrivateRoom } from '@/services/private-room';
 import { supabase } from '@/services/supabase';
@@ -41,16 +36,26 @@ export function RoomLobbyScreenView({
   const prize      = Math.round(entryFee * 2 * 0.9);
   const inviteLink = `${APP_URL}/entrar/${inviteCode}`;
 
-  // Pulse animation for the waiting indicator
-  const pulse = useSharedValue(1);
+  // Pulse animation using standard Animated API (reliable on web production)
+  const pulseAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
-    pulse.value = withRepeat(
-      withTiming(1.12, { duration: 900, easing: Easing.inOut(Easing.sine) }),
-      -1,
-      true,
-    );
-  }, []);
-  const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.12,
+          duration: 900,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 900,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    ).start();
+  }, [pulseAnim]);
 
   // Realtime: wait for player2 to join
   useEffect(() => {
@@ -112,7 +117,7 @@ export function RoomLobbyScreenView({
 
         {/* Waiting animation */}
         <View style={styles.waitZone}>
-          <Animated.View style={[styles.pulseRing, pulseStyle]} />
+          <Animated.View style={[styles.pulseRing, { transform: [{ scale: pulseAnim }] }]} />
           <View style={styles.waitCore}>
             <MaterialCommunityIcons name="timer-sand" size={40} color={theme.colors.primary} />
           </View>
