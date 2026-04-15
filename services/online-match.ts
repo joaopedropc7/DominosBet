@@ -1,12 +1,14 @@
 import type { OnlineGameState, MatchRoomRow } from '@/types/database';
 import { supabase } from './supabase';
 
-export const ENTRY_FEE = 100;   // coins per player
-export const WINNER_REWARD = Math.round(ENTRY_FEE * 2 * 0.9); // 180 coins
+export const ENTRY_FEE = 20;    // coins per player
+export const WINNER_REWARD = Math.round(ENTRY_FEE * 2 * 0.9); // 36 coins
 
-/** Find a waiting room or create a new one. Returns room_id and your role. */
-export async function joinMatchmaking(): Promise<{ roomId: string; role: 'p1' | 'p2' }> {
-  const { data, error } = await supabase.rpc('join_matchmaking');
+/** Find a waiting room or create a new one for a specific mode. Returns room_id and your role. */
+export async function joinMatchmaking(
+  mode: 'classic' | 'express',
+): Promise<{ roomId: string; role: 'p1' | 'p2' }> {
+  const { data, error } = await supabase.rpc('join_matchmaking', { p_mode: mode });
   if (error) throw new Error(error.message);
   const result = data as { room_id: string; role: 'p1' | 'p2' };
   return { roomId: result.room_id, role: result.role };

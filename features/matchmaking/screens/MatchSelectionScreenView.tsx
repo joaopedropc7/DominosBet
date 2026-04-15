@@ -21,6 +21,7 @@ interface MatchMode {
   badgeAccent: boolean;
   icon: string;
   cta: string;
+  isOnline: boolean;
   onPress: () => void;
 }
 
@@ -31,7 +32,7 @@ export function MatchSelectionScreenView() {
   const balance = profile?.balance ?? 0;
   const hasBalance = balance >= ENTRY_FEE;
 
-  function handleOnlinePress() {
+  function handleOnlinePress(mode: 'classic' | 'express') {
     if (!hasBalance) {
       Alert.alert(
         'Saldo insuficiente',
@@ -40,21 +41,35 @@ export function MatchSelectionScreenView() {
       );
       return;
     }
-    router.push('/(main)/busca-partida');
+    router.push({ pathname: '/(main)/busca-partida', params: { mode } } as any);
   }
 
   const modes: MatchMode[] = [
     {
-      id: 'online',
-      eyebrow: '1v1 Online',
+      id: 'classic',
+      eyebrow: '1v1 Clássico',
       eyebrowAccent: true,
-      title: 'Arena Online',
-      description: `Entrada: ${formatCoins(ENTRY_FEE)} moedas · Prêmio: ${formatCoins(Math.round(ENTRY_FEE * 2 * 0.9))} moedas`,
+      title: 'Arena Clássica',
+      description: `Com compra do monte · Entrada: ${formatCoins(ENTRY_FEE)} · Prêmio: ${formatCoins(Math.round(ENTRY_FEE * 2 * 0.9))} moedas`,
       badge: 'Ao vivo',
       badgeAccent: true,
       icon: 'account-group',
+      isOnline: true,
       cta: hasBalance ? 'Buscar partida' : 'Saldo insuficiente',
-      onPress: handleOnlinePress,
+      onPress: () => handleOnlinePress('classic'),
+    },
+    {
+      id: 'express',
+      eyebrow: '1v1 Expresso',
+      eyebrowAccent: true,
+      title: 'Arena Expresso',
+      description: `Sem monte · Bloqueia = fim · Entrada: ${formatCoins(ENTRY_FEE)} · Prêmio: ${formatCoins(Math.round(ENTRY_FEE * 2 * 0.9))} moedas`,
+      badge: 'Ao vivo',
+      badgeAccent: true,
+      icon: 'lightning-bolt',
+      isOnline: true,
+      cta: hasBalance ? 'Buscar partida' : 'Saldo insuficiente',
+      onPress: () => handleOnlinePress('express'),
     },
     {
       id: 'bot',
@@ -65,6 +80,7 @@ export function MatchSelectionScreenView() {
       badge: 'Offline',
       badgeAccent: false,
       icon: 'robot',
+      isOnline: false,
       cta: 'Jogar vs Bot',
       onPress: () => router.push('/(main)/jogo-bot'),
     },
@@ -119,18 +135,18 @@ export function MatchSelectionScreenView() {
                 onPress={mode.onPress}
                 style={({ pressed }) => [
                   styles.ctaBtn,
-                  mode.eyebrowAccent && hasBalance && styles.ctaBtnAccent,
-                  mode.eyebrowAccent && !hasBalance && styles.ctaBtnDisabled,
+                  mode.isOnline && hasBalance && styles.ctaBtnAccent,
+                  mode.isOnline && !hasBalance && styles.ctaBtnDisabled,
                   pressed && { opacity: 0.85 },
                 ]}
               >
-                <Text style={[styles.ctaBtnText, !mode.eyebrowAccent && styles.ctaBtnTextMuted]}>
+                <Text style={[styles.ctaBtnText, !mode.isOnline && styles.ctaBtnTextMuted]}>
                   {mode.cta}
                 </Text>
                 <MaterialCommunityIcons
                   name="arrow-right"
                   size={16}
-                  color={mode.eyebrowAccent ? '#241A00' : theme.colors.text}
+                  color={mode.isOnline ? '#241A00' : theme.colors.text}
                 />
               </Pressable>
             </View>

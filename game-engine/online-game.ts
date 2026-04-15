@@ -58,11 +58,13 @@ export function createOnlineMatch(
   p2Id: string,
   p1Name: string,
   p2Name: string,
+  mode: 'classic' | 'express' = 'classic',
 ): OnlineGameState {
   const shuffled = shuffle(createFullSet());
   const p1Hand = sortHand(shuffled.slice(0, 7));
   const p2Hand = sortHand(shuffled.slice(7, 14));
-  const boneyard = shuffled.slice(14);
+  // Express mode: no boneyard — all remaining tiles are discarded
+  const boneyard = mode === 'classic' ? shuffled.slice(14) : [];
 
   // Opening move: whoever holds the highest double goes first
   const opener = findOpener(p1Hand, p2Hand, p1Id, p2Id);
@@ -82,6 +84,7 @@ export function createOnlineMatch(
     result: null,
     turn: 1,
     log: [],
+    mode,
   };
 
   // Play opening tile
@@ -174,6 +177,7 @@ export function applyOnlineDraw(
 ): OnlineGameState {
   if (state.status === 'finished') return state;
   if (state.currentTurn !== role) throw new Error('Não é o turno deste jogador.');
+  if (state.mode !== 'classic') throw new Error('Compra não disponível neste modo.');
 
   if (state.boneyard.length === 0) {
     return applyOnlinePass(state, role);
@@ -206,10 +210,12 @@ export function applyOnlinePass(
     currentTurn: opponent(role),
     consecutivePasses: state.consecutivePasses + 1,
     turn: state.turn + 1,
-    log: appendLog(state.log, `${playerName} passou a vez.`),
+    log: appendLog(state.log, `${playerName} ficou sem jogadas.`),
   };
 
-  if (next.consecutivePasses >= 2) {
+  // Express: any block ends the game immediately
+  // Classic: only end after both players pass consecutively
+  if (state.mode === 'express' || next.consecutivePasses >= 2) {
     return finishBlocked(next);
   }
 
@@ -283,12 +289,24 @@ function resolveAfterAction(
     });
   }
 
-  return {
+  const nextState: OnlineGameState = {
     ...state,
     currentTurn: opponent(role),
     consecutivePasses: 0,
     turn: state.turn + 1,
   };
+
+  // In express mode, if the next player has no moves, end immediately
+  if (nextState.mode === 'express' && !canOnlinePlayerMove(nextState, opponent(role))) {
+    const nextName = opponent(role) === 'p1' ? state.p1Name : state.p2Name;
+    const withLog = {
+      ...nextState,
+      log: appendLog(nextState.log, `${nextName} ficou sem jogadas.`),
+    };
+    return finishBlocked(withLog);
+  }
+
+  return nextState;
 }
 
 function finishBlocked(state: OnlineGameState): OnlineGameState {

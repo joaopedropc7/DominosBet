@@ -155,6 +155,7 @@ export interface Database {
         Row: {
           id: string;
           status: 'waiting' | 'playing' | 'finished';
+          mode: 'classic' | 'express';
           player1_id: string;
           player2_id: string | null;
           current_turn_id: string | null;
@@ -171,6 +172,7 @@ export interface Database {
         Insert: {
           id?: string;
           status?: 'waiting' | 'playing' | 'finished';
+          mode?: 'classic' | 'express';
           player1_id: string;
           player2_id?: string | null;
           current_turn_id?: string | null;
@@ -306,6 +308,7 @@ export interface OnlineGameState {
   result: OnlineResult | null;
   turn: number;
   log: OnlineLogEntry[];
+  mode: 'classic' | 'express';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

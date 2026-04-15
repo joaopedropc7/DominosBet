@@ -370,7 +370,9 @@ function createBoardLayout(board: PlayedTile[], _compact: boolean, viewportWidth
   // totalRows is fixed — canvas height never grows beyond visible area
   const totalRows = rowLimit;
 
-  const slotBoard = initBoardSlots(cols, rowLimit);
+  const startCol = Math.floor((cols - 2) / 2);
+  const startRow = Math.floor(rowLimit / 2);
+  const slotBoard = initBoardSlots(cols, rowLimit, { col: startCol, row: startRow });
   for (const tile of board) placePiece(slotBoard, tile);
 
   // Resolve the effective cursor.

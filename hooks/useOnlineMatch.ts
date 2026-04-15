@@ -212,7 +212,7 @@ export function useOnlineMatch({
       const p1Name = profiles?.find((p) => p.id === p1Id)?.display_name ?? 'Jogador 1';
       const p2Name = profiles?.find((p) => p.id === p2Id)?.display_name ?? 'Jogador 2';
 
-      const initialState = createOnlineMatch(p1Id, p2Id, p1Name, p2Name);
+      const initialState = createOnlineMatch(p1Id, p2Id, p1Name, p2Name, currentRoom.mode);
       const firstTurnUserId = initialState.currentTurn === 'p1' ? p1Id : p2Id;
 
       // start_online_match now deducts entry fees atomically

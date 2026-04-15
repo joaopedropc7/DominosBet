@@ -14,7 +14,11 @@ import type { MatchRoomRow } from '@/types/database';
 
 type SearchPhase = 'joining' | 'waiting' | 'found' | 'error';
 
-export function MatchSearchScreenView() {
+interface MatchSearchScreenViewProps {
+  mode: 'classic' | 'express';
+}
+
+export function MatchSearchScreenView({ mode }: MatchSearchScreenViewProps) {
   const { isCompact } = useResponsive();
   const { profile } = useUserData();
   const [phase, setPhase] = useState<SearchPhase>('joining');
@@ -28,7 +32,7 @@ export function MatchSearchScreenView() {
 
     async function startMatchmaking() {
       try {
-        const { roomId, role } = await joinMatchmaking();
+        const { roomId, role } = await joinMatchmaking(mode);
         if (!mounted) return;
         roomIdRef.current = roomId;
         roleRef.current = role;
@@ -137,7 +141,9 @@ export function MatchSearchScreenView() {
           {phase === 'waiting' && (
             <>
               <Text style={[styles.title, isCompact && styles.titleCompact]}>Procurando adversário…</Text>
-              <Text style={styles.subtitle}>Modo: 1v1 Online</Text>
+              <Text style={styles.subtitle}>
+                {mode === 'classic' ? 'Modo: Clássico — com monte' : 'Modo: Expresso — sem monte'}
+              </Text>
             </>
           )}
           {phase === 'found' && (

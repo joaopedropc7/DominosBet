@@ -79,6 +79,38 @@ export function OnlineMatchScreenView({
     prevPhase.current = phase;
   }, [phase, game]);
 
+  // ── Pass-turn toast animation ─────────────────────────────────────────────
+  const [passToastMsg, setPassToastMsg] = useState('');
+  const [showPassToast, setShowPassToast] = useState(false);
+  const passToastY = useRef(new Animated.Value(-60)).current;
+  const passToastOpacity = useRef(new Animated.Value(0)).current;
+  const lastLogIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!game?.log?.length) return;
+    const latest = game.log[0];
+    if (!latest || latest.id === lastLogIdRef.current) return;
+    lastLogIdRef.current = latest.id;
+    if (!latest.message.includes('passou a vez')) return;
+
+    setPassToastMsg(latest.message);
+    setShowPassToast(true);
+    passToastY.setValue(-60);
+    passToastOpacity.setValue(0);
+
+    Animated.parallel([
+      Animated.spring(passToastY, { toValue: 0, friction: 7, tension: 90, useNativeDriver: true }),
+      Animated.timing(passToastOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+    ]).start(() => {
+      setTimeout(() => {
+        Animated.parallel([
+          Animated.timing(passToastY, { toValue: -60, duration: 300, useNativeDriver: true }),
+          Animated.timing(passToastOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+        ]).start(() => setShowPassToast(false));
+      }, 2000);
+    });
+  }, [game?.log]);
+
   // ── Result overlay animation ──────────────────────────────────────────────
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const overlayScale = useRef(new Animated.Value(0.8)).current;
@@ -125,14 +157,15 @@ export function OnlineMatchScreenView({
   );
 
   const canPlay = myLegalMoves.length > 0;
-  const canDraw = game ? game.boneyard.length > 0 : false;
+  const isClassic = game?.mode === 'classic';
+  const canDraw = isClassic && (game?.boneyard.length ?? 0) > 0;
 
   const boardLayout = useMemo(
     () => game ? createBoardLayout(game.board, width, boardBoxH) : null,
     [game?.board, width, boardBoxH],
   );
 
-  // ── Auto-pass when no moves and empty boneyard ────────────────────────────
+  // ── Auto-pass when no moves and can't draw ────────────────────────────────
   useEffect(() => {
     if (!game || !isMyturn || canPlay || canDraw || phase !== 'playing') return;
     const t = setTimeout(() => passTurn(), 700);
@@ -237,6 +270,14 @@ export function OnlineMatchScreenView({
           </View>
         </View>
 
+        {/* Pass-turn toast */}
+        {showPassToast && (
+          <Animated.View style={[styles.passToast, { transform: [{ translateY: passToastY }], opacity: passToastOpacity }]}>
+            <MaterialCommunityIcons name="hand-back-right-outline" size={16} color={theme.colors.textSoft} />
+            <Text style={styles.passToastText}>{passToastMsg}</Text>
+          </Animated.View>
+        )}
+
         {/* Opponent zone */}
         <View style={styles.opponentZone}>
           <View style={styles.opponentAvatar}>
@@ -312,7 +353,7 @@ export function OnlineMatchScreenView({
             <Text style={styles.footerCaption}>
               {isMyturn && phase === 'playing'
                 ? selectedTile ? 'Toque em uma ponta dourada da mesa.'
-                  : !canPlay && !canDraw ? 'Sem jogadas. Passando vez…'
+                  : !canPlay && !canDraw ? 'Sem jogadas — encerrando partida…'
                     : !canPlay && canDraw ? 'Sem jogadas — compre uma peça.'
                       : 'Selecione uma peça.'
                 : phase === 'playing' ? `Aguarde ${opponentName}…` : ''}
@@ -467,7 +508,9 @@ function createBoardLayout(board: OnlinePlayedTile[], viewportWidth: number, con
   const rowLimit = Math.max(2, Math.floor((containerH - PAD_V * 2) / S));
   const totalRows = rowLimit;
 
-  const slotBoard = initBoardSlots(cols, rowLimit);
+  const startCol = Math.floor((cols - 2) / 2);
+  const startRow = Math.floor(rowLimit / 2);
+  const slotBoard = initBoardSlots(cols, rowLimit, { col: startCol, row: startRow });
   for (const tile of board) placePiece(slotBoard, tile as any);
 
   let { cursor, direction } = slotBoard;
@@ -543,15 +586,19 @@ const styles = StyleSheet.create({
   playerHand: { minHeight: 110, paddingRight: theme.spacing.xs, alignItems: 'flex-end' },
   playerHandCompact: { paddingHorizontal: theme.spacing.xs },
   playerTileWrap: { marginRight: theme.spacing.sm },
-  drawBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.colors.primary, borderRadius: theme.radius.lg, paddingVertical: 12, marginTop: theme.spacing.xs },
-  drawBtnText: { color: '#241A00', fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 14 },
-
   // Waiting/error
   waitTitle: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.display, fontSize: 22, textAlign: 'center' },
   waitText: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 14, textAlign: 'center' },
   errorText: { color: theme.colors.danger, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 14, textAlign: 'center' },
   cancelBtn: { backgroundColor: theme.colors.surfaceHigh, borderRadius: theme.radius.lg, paddingHorizontal: theme.spacing.xl, paddingVertical: 12, borderWidth: 1, borderColor: theme.colors.outline, marginTop: theme.spacing.md },
   cancelBtnText: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 14 },
+
+  drawBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.colors.primary, borderRadius: theme.radius.lg, paddingVertical: 12, marginTop: theme.spacing.xs },
+  drawBtnText: { color: '#241A00', fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 14 },
+
+  // Pass-turn toast
+  passToast: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'center', backgroundColor: theme.colors.surface, borderRadius: theme.radius.pill, paddingHorizontal: 16, paddingVertical: 9, borderWidth: 1, borderColor: theme.colors.outline, marginBottom: theme.spacing.xs, zIndex: 5 },
+  passToastText: { color: theme.colors.textSoft, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 13 },
 
   // Opener overlay
   openerOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center', zIndex: 20 },

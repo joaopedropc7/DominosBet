@@ -125,17 +125,18 @@ function occupy(b: BoardSlotState, c: Coord, slot: DominoSlot): void {
  * @param cols     Number of slot columns (horizontal limit).
  * @param rowLimit Maximum number of rows (vertical limit). Defaults to 100.
  */
-export function initBoardSlots(cols: number, rowLimit = 100): BoardSlotState {
+export function initBoardSlots(cols: number, rowLimit = 100, startCursor?: Coord): BoardSlotState {
+  const cursor = startCursor ?? { col: 0, row: 0 };
   return {
     cols,
     rowLimit,
     placements: [],
     occupied: new Map(),
-    cursor: { col: 0, row: 0 },
+    cursor,
     direction: 'ltr',
     chainEndValue: null,
     chainEndCoord: null,
-    maxRow: 0,
+    maxRow: cursor.row,
     cornerPending: 0,
   };
 }
