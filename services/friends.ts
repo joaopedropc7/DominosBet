@@ -8,29 +8,20 @@ export async function findProfileByNickname(nickname: string): Promise<ProfileRo
   return (data as ProfileRow[])[0] ?? null;
 }
 
-/** Send a friend request to a user by their profile id */
+/** Send a friend request to a user by their profile id (also creates a notification) */
 export async function sendFriendRequest(addresseeId: string): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Não autenticado.');
-
-  const { error } = await supabase.from('friendships').insert({
-    requester_id: user.id,
-    addressee_id: addresseeId,
+  const { error } = await supabase.rpc('send_friend_request', {
+    p_addressee_id: addresseeId,
   });
-
-  if (error) {
-    if (error.code === '23505') throw new Error('Solicitação já enviada.');
-    throw error;
-  }
+  if (error) throw new Error(error.message);
 }
 
-/** Accept a pending friend request (current user is addressee) */
+/** Accept a pending friend request (also marks the notification as read) */
 export async function acceptFriendRequest(friendshipId: string): Promise<void> {
-  const { error } = await supabase
-    .from('friendships')
-    .update({ status: 'accepted' })
-    .eq('id', friendshipId);
-  if (error) throw error;
+  const { error } = await supabase.rpc('accept_friend_request', {
+    p_friendship_id: friendshipId,
+  });
+  if (error) throw new Error(error.message);
 }
 
 /** Remove a friendship or cancel a pending request */

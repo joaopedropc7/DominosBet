@@ -2,9 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Avatar } from '@/components/base/Avatar';
 import { Card } from '@/components/base/Card';
 import { Screen } from '@/components/base/Screen';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { acceptFriendRequest, removeFriendship } from '@/services/friends';
 import {
   listNotifications,
   markNotificationsRead,
@@ -22,7 +24,6 @@ export function NotificationsScreenView() {
     try {
       const data = await listNotifications();
       setNotifications(data);
-      // Mark all as read after loading
       const unread = data.filter(n => !n.read).map(n => n.id);
       if (unread.length > 0) await markNotificationsRead(unread);
     } finally {
@@ -31,6 +32,10 @@ export function NotificationsScreenView() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  function dismiss(id: string) {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  }
 
   return (
     <Screen>
@@ -48,12 +53,12 @@ export function NotificationsScreenView() {
         <View style={styles.center}>
           <MaterialCommunityIcons name="bell-outline" size={48} color={theme.colors.textFaint} />
           <Text style={styles.emptyTitle}>Sem notificações</Text>
-          <Text style={styles.emptySub}>Convites de sala e outras novidades aparecerão aqui.</Text>
+          <Text style={styles.emptySub}>Pedidos de amizade e convites de sala aparecerão aqui.</Text>
         </View>
       ) : (
         <View style={styles.list}>
           {notifications.map(n => (
-            <NotificationCard key={n.id} notification={n} />
+            <NotificationCard key={n.id} notification={n} onDismiss={() => dismiss(n.id)} />
           ))}
         </View>
       )}
@@ -61,44 +66,102 @@ export function NotificationsScreenView() {
   );
 }
 
-function NotificationCard({ notification }: { notification: AppNotification }) {
-  const p = notification.payload;
+function NotificationCard({
+  notification,
+  onDismiss,
+}: {
+  notification: AppNotification;
+  onDismiss: () => void;
+}) {
+  const [acting, setActing] = useState(false);
 
   if (notification.type === 'room_invite') {
+    const p = notification.payload;
     const modeName = p.mode === 'express' ? 'Expresso' : 'Clássico';
-    const roomLabel = p.room_name ? String(p.room_name) : 'Sala Privada';
+    const roomLabel = p.room_name ?? 'Sala Privada';
+
     return (
       <Card variant="low">
-        <View style={[styles.notifCard, !notification.read && styles.notifCardUnread]}>
-          {/* Icon */}
-          <View style={styles.notifIcon}>
+        <View style={styles.row}>
+          <View style={[styles.iconWrap, styles.iconInvite]}>
             <MaterialCommunityIcons name="door-open" size={22} color={theme.colors.primary} />
           </View>
-          {/* Text */}
-          <View style={styles.notifBody}>
-            <Text style={styles.notifTitle}>
-              <Text style={styles.notifName}>{String(p.sender_name)}</Text>
-              {' convidou você para uma sala'}
+          <View style={styles.body}>
+            <Text style={styles.title}>
+              <Text style={styles.bold}>{p.sender_name}</Text>
+              {' convidou você para jogar'}
             </Text>
-            <Text style={styles.notifDetail}>
-              {roomLabel} · {modeName} · Entrada: {formatCoins(Number(p.entry_fee))}
+            <Text style={styles.detail}>
+              {roomLabel} · {modeName} · Entrada: {formatCoins(p.entry_fee)}
             </Text>
-            <Text style={styles.notifTime}>{formatTimelineLabel(notification.created_at)}</Text>
+            <Text style={styles.time}>{formatTimelineLabel(notification.created_at)}</Text>
           </View>
         </View>
-        {/* CTA */}
         <Pressable
-          onPress={() =>
-            router.push({
-              pathname: '/(main)/entrar/[code]',
-              params: { code: String(p.invite_code) },
-            } as any)
-          }
-          style={({ pressed }) => [styles.joinBtn, pressed && { opacity: 0.8 }]}
+          onPress={() => router.push({ pathname: '/(main)/entrar/[code]', params: { code: p.invite_code } } as any)}
+          style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.8 }]}
         >
           <MaterialCommunityIcons name="arrow-right-circle-outline" size={16} color="#241A00" />
-          <Text style={styles.joinBtnText}>Entrar na sala</Text>
+          <Text style={styles.primaryBtnText}>Entrar na sala</Text>
         </Pressable>
+      </Card>
+    );
+  }
+
+  if (notification.type === 'friend_request') {
+    const p = notification.payload;
+
+    async function handleAccept() {
+      setActing(true);
+      try {
+        await acceptFriendRequest(p.friendship_id);
+        onDismiss();
+      } catch { } finally { setActing(false); }
+    }
+
+    async function handleDecline() {
+      setActing(true);
+      try {
+        await removeFriendship(p.friendship_id);
+        onDismiss();
+      } catch { } finally { setActing(false); }
+    }
+
+    return (
+      <Card variant="low">
+        <View style={styles.row}>
+          <View style={[styles.iconWrap, styles.iconFriend]}>
+            <MaterialCommunityIcons name="account-plus-outline" size={22} color={theme.colors.accent} />
+          </View>
+          <View style={styles.body}>
+            <Text style={styles.title}>
+              <Text style={styles.bold}>{p.requester_name}</Text>
+              {' quer ser seu amigo'}
+            </Text>
+            <Text style={styles.time}>{formatTimelineLabel(notification.created_at)}</Text>
+          </View>
+        </View>
+        <View style={styles.twoBtn}>
+          <Pressable
+            onPress={handleAccept}
+            disabled={acting}
+            style={({ pressed }) => [styles.primaryBtn, { flex: 1 }, pressed && { opacity: 0.8 }]}
+          >
+            {acting
+              ? <ActivityIndicator size="small" color="#241A00" />
+              : <>
+                  <MaterialCommunityIcons name="check" size={16} color="#241A00" />
+                  <Text style={styles.primaryBtnText}>Aceitar</Text>
+                </>}
+          </Pressable>
+          <Pressable
+            onPress={handleDecline}
+            disabled={acting}
+            style={({ pressed }) => [styles.ghostBtn, { flex: 1 }, pressed && { opacity: 0.7 }]}
+          >
+            <Text style={styles.ghostBtnText}>Recusar</Text>
+          </Pressable>
+        </View>
       </Card>
     );
   }
@@ -127,34 +190,24 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   list: { gap: theme.spacing.sm },
-  notifCard: { flexDirection: 'row', gap: theme.spacing.sm, marginBottom: theme.spacing.sm },
-  notifCardUnread: {},
-  notifIcon: {
-    width: 44,
-    height: 44,
+
+  row: { flexDirection: 'row', gap: theme.spacing.sm, marginBottom: theme.spacing.sm },
+  iconWrap: {
+    width: 44, height: 44,
     borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  notifBody: { flex: 1, gap: 2 },
-  notifTitle: {
-    color: theme.colors.text,
-    fontFamily: theme.typography.fontFamily.bodyMedium,
-    fontSize: 14,
-  },
-  notifName: { fontFamily: theme.typography.fontFamily.bodyBold },
-  notifDetail: {
-    color: theme.colors.textSoft,
-    fontFamily: theme.typography.fontFamily.bodyMedium,
-    fontSize: 12,
-  },
-  notifTime: {
-    color: theme.colors.textFaint,
-    fontFamily: theme.typography.fontFamily.body,
-    fontSize: 11,
-  },
-  joinBtn: {
+  iconInvite: { backgroundColor: theme.colors.primarySoft },
+  iconFriend: { backgroundColor: 'rgba(100,200,255,0.12)' },
+
+  body: { flex: 1, gap: 2 },
+  title: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 14 },
+  bold: { fontFamily: theme.typography.fontFamily.bodyBold },
+  detail: { color: theme.colors.textSoft, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 12 },
+  time: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.body, fontSize: 11 },
+
+  primaryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -163,9 +216,16 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     paddingVertical: 10,
   },
-  joinBtnText: {
-    color: '#241A00',
-    fontFamily: theme.typography.fontFamily.bodyBold,
-    fontSize: 13,
+  primaryBtnText: { color: '#241A00', fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 13 },
+
+  twoBtn: { flexDirection: 'row', gap: theme.spacing.sm },
+  ghostBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: theme.radius.md,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.outline,
   },
+  ghostBtnText: { color: theme.colors.textSoft, fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 13 },
 });

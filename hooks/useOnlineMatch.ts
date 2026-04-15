@@ -94,6 +94,13 @@ export function useOnlineMatch({
         : result.winner === 'p2' ? currentRoom.player2_id
         : null; // draw
 
+      const iWon   = winnerId === myUserId;
+      const isDraw = winnerId === null;
+      const fee    = currentRoom.entry_fee ?? 20;
+      // Expected values derived from entry_fee (used when RPC returns 0,0)
+      const expectedWinnerReward = Math.round(fee * 2 * 0.9);
+      const expectedLoserReward  = -fee;
+
       try {
         const { winnerReward, loserReward } = await resolveOnlineMatch(
           roomId,
@@ -103,26 +110,26 @@ export function useOnlineMatch({
           result.p2Pips,
         );
 
-        const iWon = winnerId === myUserId;
-        const isDraw = winnerId === null;
+        // RPC returns {0, 0} when the room was already resolved by the opponent.
+        // In that case fall back to the expected values derived from entry_fee.
+        const effectiveWinner = winnerReward > 0 ? winnerReward : expectedWinnerReward;
+        const effectiveLoser  = loserReward  < 0 ? loserReward  : expectedLoserReward;
 
         setRewards({
-          winnerReward,
-          loserReward,
+          winnerReward: effectiveWinner,
+          loserReward:  effectiveLoser,
           iWon,
           isDraw,
-          myReward: isDraw ? loserReward : iWon ? winnerReward : loserReward,
+          myReward: isDraw ? effectiveLoser : iWon ? effectiveWinner : effectiveLoser,
         });
       } catch {
-        // Already resolved by opponent — fetch rewards from existing data
-        const iWon = winnerId === myUserId;
-        const isDraw = winnerId === null;
+        // Already resolved by opponent — compute from entry_fee
         setRewards({
-          winnerReward: currentRoom.pot ? Math.round(currentRoom.pot * 0.9) : 0,
-          loserReward: 0,
+          winnerReward: expectedWinnerReward,
+          loserReward:  expectedLoserReward,
           iWon,
           isDraw,
-          myReward: iWon ? Math.round((currentRoom.pot ?? 0) * 0.9) : 0,
+          myReward: isDraw ? 0 : iWon ? expectedWinnerReward : expectedLoserReward,
         });
       }
     },

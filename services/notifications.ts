@@ -1,14 +1,5 @@
 import { supabase } from './supabase';
 
-export interface AppNotification {
-  id: string;
-  user_id: string;
-  type: 'room_invite';
-  payload: RoomInvitePayload;
-  read: boolean;
-  created_at: string;
-}
-
 export interface RoomInvitePayload {
   sender_id: string;
   sender_name: string;
@@ -18,6 +9,16 @@ export interface RoomInvitePayload {
   room_name: string | null;
   mode: 'classic' | 'express';
 }
+
+export interface FriendRequestPayload {
+  requester_id: string;
+  requester_name: string;
+  friendship_id: string;
+}
+
+export type AppNotification =
+  | { id: string; user_id: string; type: 'room_invite';    payload: RoomInvitePayload;    read: boolean; created_at: string }
+  | { id: string; user_id: string; type: 'friend_request'; payload: FriendRequestPayload; read: boolean; created_at: string };
 
 /** List unread notifications for the current user. */
 export async function listNotifications(): Promise<AppNotification[]> {

@@ -442,14 +442,18 @@ export function OnlineMatchScreenView({
 
               {/* Reward badge */}
               {rewards && (
-                <View style={[styles.rewardBadge, rewards.myReward > 0 && styles.rewardBadgeGold]}>
+                <View style={[styles.rewardBadge, rewards.iWon && styles.rewardBadgeGold]}>
                   <MaterialCommunityIcons
-                    name={rewards.myReward > 0 ? 'trophy' : 'minus-circle-outline'}
+                    name={rewards.iWon ? 'trophy' : rewards.isDraw ? 'handshake-outline' : 'minus-circle-outline'}
                     size={18}
-                    color={rewards.myReward > 0 ? '#241A00' : theme.colors.textFaint}
+                    color={rewards.iWon ? '#241A00' : theme.colors.textFaint}
                   />
-                  <Text style={[styles.rewardBadgeText, rewards.myReward > 0 && styles.rewardBadgeTextGold]}>
-                    {rewards.myReward > 0 ? `+${formatCoins(rewards.myReward)} moedas` : `−${formatCoins(ENTRY_FEE)} moedas`}
+                  <Text style={[styles.rewardBadgeText, rewards.iWon && styles.rewardBadgeTextGold]}>
+                    {rewards.isDraw
+                      ? '± 0 moedas'
+                      : rewards.iWon
+                        ? `+${formatCoins(rewards.winnerReward)} moedas`
+                        : `−${formatCoins(Math.abs(rewards.loserReward))} moedas`}
                   </Text>
                 </View>
               )}
