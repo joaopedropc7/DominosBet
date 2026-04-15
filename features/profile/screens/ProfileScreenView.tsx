@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '@/components/base/Avatar';
 import { Button } from '@/components/base/Button';
 import { Card } from '@/components/base/Card';
@@ -19,6 +20,7 @@ export function ProfileScreenView() {
   const { user, signOut } = useAuth();
   const { profile, matchHistory } = useUserData();
   const { isCompact } = useResponsive();
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'private'>('all');
 
   const displayName = profile?.display_name
     ?? getDisplayName(user?.email, user?.user_metadata?.display_name)
@@ -103,27 +105,56 @@ export function ProfileScreenView() {
 
       {/* Match history */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Histórico de partidas</Text>
-
-        {matchHistory.length === 0 ? (
-          <Card variant="low">
-            <View style={styles.emptyHistory}>
-              <MaterialCommunityIcons name="gamepad-variant-outline" size={32} color={theme.colors.textFaint} />
-              <Text style={styles.emptyHistoryText}>Nenhuma partida registrada ainda.</Text>
-              <Button
-                title="Jogar agora"
-                fullWidth={false}
-                onPress={() => router.push('/(main)/selecao-partida')}
-              />
-            </View>
-          </Card>
-        ) : (
-          <View style={styles.historyList}>
-            {matchHistory.map((match) => (
-              <MatchHistoryCard key={match.id} match={match} />
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Histórico</Text>
+          <View style={styles.filterRow}>
+            {(['all', 'private'] as const).map((f) => (
+              <Pressable
+                key={f}
+                onPress={() => setHistoryFilter(f)}
+                style={[styles.filterBtn, historyFilter === f && styles.filterBtnActive]}
+              >
+                <Text style={[styles.filterBtnText, historyFilter === f && styles.filterBtnTextActive]}>
+                  {f === 'all' ? 'Todas' : 'Salas Privadas'}
+                </Text>
+              </Pressable>
             ))}
           </View>
-        )}
+        </View>
+
+        {(() => {
+          const filtered = historyFilter === 'private'
+            ? matchHistory.filter(m => m.is_private)
+            : matchHistory;
+          if (filtered.length === 0) {
+            return (
+              <Card variant="low">
+                <View style={styles.emptyHistory}>
+                  <MaterialCommunityIcons name="gamepad-variant-outline" size={32} color={theme.colors.textFaint} />
+                  <Text style={styles.emptyHistoryText}>
+                    {historyFilter === 'private'
+                      ? 'Nenhuma partida em sala privada ainda.'
+                      : 'Nenhuma partida registrada ainda.'}
+                  </Text>
+                  {historyFilter === 'all' && (
+                    <Button
+                      title="Jogar agora"
+                      fullWidth={false}
+                      onPress={() => router.push('/(main)/selecao-partida')}
+                    />
+                  )}
+                </View>
+              </Card>
+            );
+          }
+          return (
+            <View style={styles.historyList}>
+              {filtered.map((match) => (
+                <MatchHistoryCard key={match.id} match={match} />
+              ))}
+            </View>
+          );
+        })()}
       </View>
     </Screen>
   );
@@ -194,7 +225,20 @@ const styles = StyleSheet.create({
   actions: { gap: theme.spacing.md },
 
   section: { gap: theme.spacing.md },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: theme.spacing.sm },
   sectionTitle: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.display, fontSize: 24 },
+  filterRow: { flexDirection: 'row', gap: theme.spacing.xs },
+  filterBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.surfaceHigh,
+    borderWidth: 1,
+    borderColor: theme.colors.outline,
+  },
+  filterBtnActive: { backgroundColor: theme.colors.primarySoft, borderColor: theme.colors.primary },
+  filterBtnText: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 11 },
+  filterBtnTextActive: { color: theme.colors.primary },
 
   emptyHistory: { alignItems: 'center', gap: theme.spacing.md, paddingVertical: theme.spacing.lg },
   emptyHistoryText: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 14, textAlign: 'center' },

@@ -9,14 +9,19 @@ import { Screen } from '@/components/base/Screen';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useUserData } from '@/hooks/useUserData';
-import { quickMatchesMock, quickModesMock, roomPreviewsMock, userMock } from '@/services/mock-data';
+import { quickModesMock, roomPreviewsMock, userMock } from '@/services/mock-data';
+import { calcPrize } from '@/services/online-match';
 import { theme } from '@/theme';
 import { formatCoins } from '@/utils/format';
+
+const EXPRESS_BETS = [10, 20, 30, 50, 100, 150, 200];
+const HOME_PREVIEW_COUNT = 3; // items shown before "Ver todas"
 
 export function HomeScreenView() {
   const { isPhone, isCompact, width } = useResponsive();
   const { profile } = useUserData();
   const roomCardWidth = Math.min(Math.max(width - (isCompact ? 40 : 52), 240), 320);
+  const balance = profile?.balance ?? 0;
 
   return (
     <Screen withBottomNav>
@@ -47,30 +52,48 @@ export function HomeScreenView() {
       <View style={styles.section}>
         <View style={[styles.sectionHeader, isCompact && styles.sectionHeaderCompact]}>
           <Text style={[styles.sectionTitle, isCompact && styles.sectionTitleCompact]}>Partidas Rápidas</Text>
-          <Text style={styles.sectionAction}>Ver todas</Text>
+          <Pressable onPress={() => router.push('/(main)/selecao-aposta')}>
+            <Text style={styles.sectionAction}>Ver todas</Text>
+          </Pressable>
         </View>
         <View style={styles.stack}>
-          {quickMatchesMock.map((item) => (
-            <Pressable key={item.id} onPress={() => router.push('/(main)/selecao-partida')} style={[styles.matchItem, isCompact && styles.matchItemCompact]}>
-              <View style={styles.matchLeft}>
-                <View style={styles.matchIconWrap}>
-                  <MaterialCommunityIcons
-                    name={item.icon}
-                    size={22}
-                    color={item.accent === 'cyan' ? theme.colors.accent : theme.colors.primary}
-                  />
+          {EXPRESS_BETS.slice(0, HOME_PREVIEW_COUNT).map((fee) => {
+            const prize = calcPrize(fee);
+            const canAfford = balance >= fee;
+            return (
+              <Pressable
+                key={fee}
+                onPress={() => canAfford && router.push({
+                  pathname: '/(main)/busca-partida',
+                  params: { mode: 'express', entryFee: String(fee) },
+                } as any)}
+                style={[styles.matchItem, isCompact && styles.matchItemCompact, !canAfford && styles.matchItemDisabled]}
+              >
+                <View style={styles.matchLeft}>
+                  <View style={styles.matchIconWrap}>
+                    <MaterialCommunityIcons
+                      name="lightning-bolt"
+                      size={22}
+                      color={canAfford ? theme.colors.accent : theme.colors.textFaint}
+                    />
+                  </View>
+                  <View>
+                    <Text style={styles.matchTitle}>{formatCoins(fee)} moedas</Text>
+                    <Text style={styles.matchSubtitle}>1v1 Expresso · sem monte</Text>
+                  </View>
                 </View>
-                <View>
-                  <Text style={styles.matchTitle}>{item.title}</Text>
-                  <Text numberOfLines={2} style={styles.matchSubtitle}>{item.subtitle}</Text>
+                <View style={[styles.matchRight, isPhone && styles.matchRightMobile]}>
+                  <Text style={styles.matchRewardLabel}>Prêmio</Text>
+                  <Text style={[styles.matchReward, !canAfford && styles.matchRewardDim]}>
+                    {formatCoins(prize)} moedas
+                  </Text>
+                  {!canAfford && (
+                    <Text style={styles.matchLocked}>sem saldo</Text>
+                  )}
                 </View>
-              </View>
-              <View style={[styles.matchRight, isPhone && styles.matchRightMobile]}>
-                <Text style={styles.matchRewardLabel}>{item.playersLabel}</Text>
-                <Text style={styles.matchReward}>{formatCoins(item.reward)} moedas</Text>
-              </View>
-            </Pressable>
-          ))}
+              </Pressable>
+            );
+          })}
         </View>
       </View>
 
@@ -210,6 +233,15 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontFamily: theme.typography.fontFamily.bodyBold,
     fontSize: 13,
+  },
+  matchRewardDim: { color: theme.colors.textFaint },
+  matchItemDisabled: { opacity: 0.5 },
+  matchLocked: {
+    color: theme.colors.textFaint,
+    fontFamily: theme.typography.fontFamily.bodyMedium,
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
   roomsRow: {
     gap: theme.spacing.md,

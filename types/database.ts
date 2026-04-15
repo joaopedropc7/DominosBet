@@ -76,6 +76,7 @@ export interface Database {
           score: number;
           opponent_score: number;
           duration_seconds: number;
+          is_private: boolean;
           created_at: string;
         };
         Insert: {
@@ -88,6 +89,7 @@ export interface Database {
           score: number;
           opponent_score: number;
           duration_seconds: number;
+          is_private?: boolean;
           created_at?: string;
         };
         Update: Partial<Database['public']['Tables']['match_history']['Insert']>;
@@ -340,6 +342,15 @@ export type AdminDashboardData = {
 };
 
 export type MatchRoomRow = Database['public']['Tables']['match_rooms']['Row'];
+
+export interface NotificationRow {
+  id: string;
+  user_id: string;
+  type: 'room_invite';
+  payload: Record<string, unknown>;
+  read: boolean;
+  created_at: string;
+}
 
 export interface FriendEntry {
   friendshipId: string;

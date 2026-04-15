@@ -9,9 +9,11 @@ interface AppHeaderProps {
   compactBrand?: boolean;
   rightIcon?: keyof typeof MaterialCommunityIcons.glyphMap;
   onRightPress?: () => void;
+  /** Optional badge count shown over the right icon (e.g. unread notifications) */
+  badgeCount?: number;
 }
 
-export function AppHeader({ title, subtitle, compactBrand = true, rightIcon = 'cog-outline', onRightPress }: AppHeaderProps) {
+export function AppHeader({ title, subtitle, compactBrand = true, rightIcon = 'cog-outline', onRightPress, badgeCount }: AppHeaderProps) {
   return (
     <View style={styles.root}>
       {title ? (
@@ -24,6 +26,11 @@ export function AppHeader({ title, subtitle, compactBrand = true, rightIcon = 'c
       )}
       <Pressable onPress={onRightPress} style={styles.action}>
         <MaterialCommunityIcons name={rightIcon} size={22} color={theme.colors.primary} />
+        {badgeCount != null && badgeCount > 0 && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{badgeCount > 9 ? '9+' : badgeCount}</Text>
+          </View>
+        )}
       </Pressable>
     </View>
   );
@@ -57,5 +64,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: theme.colors.surfaceHigh,
+  },
+  badge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: theme.colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontFamily: theme.typography.fontFamily.bodyBold,
+    lineHeight: 11,
   },
 });
