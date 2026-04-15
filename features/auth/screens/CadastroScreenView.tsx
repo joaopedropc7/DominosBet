@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { router } from 'expo-router';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/base/Button';
 import { Card } from '@/components/base/Card';
 import { Input } from '@/components/base/Input';
@@ -14,18 +14,19 @@ export function CadastroScreenView() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { signUp } = useAuth();
 
   async function handleSignUp() {
     try {
       setErrorMessage('');
-      setSuccessMessage('');
       setIsSubmitting(true);
       await signUp(email.trim(), password, name.trim());
-      setSuccessMessage('Conta criada. Se o projeto exigir confirmação por email, valide sua caixa de entrada antes de entrar.');
-      router.replace('/login');
+      Alert.alert(
+        'Confirme seu e-mail',
+        `Enviamos um link de confirmação para ${email.trim()}. Verifique sua caixa de entrada antes de entrar.`,
+        [{ text: 'OK', onPress: () => router.replace('/login') }],
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Não foi possível criar sua conta agora.';
       setErrorMessage(message);
@@ -46,7 +47,6 @@ export function CadastroScreenView() {
             <Input label="Email" value={email} onChangeText={setEmail} placeholder="voce@dominio.com" />
             <Input label="Senha" value={password} onChangeText={setPassword} placeholder="••••••••" secureTextEntry />
             {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
-            {successMessage ? <Text style={styles.success}>{successMessage}</Text> : null}
             <Button
               title={isSubmitting ? 'Criando conta...' : 'Criar e entrar'}
               onPress={handleSignUp}
@@ -84,12 +84,6 @@ const styles = StyleSheet.create({
   },
   error: {
     color: theme.colors.danger,
-    fontFamily: theme.typography.fontFamily.bodyMedium,
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  success: {
-    color: theme.colors.accent,
     fontFamily: theme.typography.fontFamily.bodyMedium,
     fontSize: 13,
     lineHeight: 20,

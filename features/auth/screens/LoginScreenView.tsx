@@ -23,7 +23,10 @@ export function LoginScreenView() {
       await signIn(email.trim(), password);
       router.replace('/(main)/home');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Não foi possível entrar agora.';
+      let message = error instanceof Error ? error.message : 'Não foi possível entrar agora.';
+      if (message.toLowerCase().includes('email not confirmed')) {
+        message = 'Confirme seu e-mail antes de entrar. Verifique sua caixa de entrada.';
+      }
       setErrorMessage(message);
     } finally {
       setIsSubmitting(false);
