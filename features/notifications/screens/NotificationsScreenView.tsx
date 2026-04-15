@@ -23,8 +23,12 @@ export function NotificationsScreenView() {
     try {
       const data = await listNotifications();
       setNotifications(data);
-      const unread = data.filter(n => !n.read).map(n => n.id);
-      if (unread.length > 0) await markNotificationsRead(unread);
+      // Only auto-mark informational notifications as read (friend_accepted).
+      // Actionable ones (friend_request, room_invite) stay unread until the user acts.
+      const infoIds = data
+        .filter(n => !n.read && n.type === 'friend_accepted')
+        .map(n => n.id);
+      if (infoIds.length > 0) await markNotificationsRead(infoIds);
     } finally {
       setLoading(false);
     }
