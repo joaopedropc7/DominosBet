@@ -213,9 +213,8 @@ export function applyOnlinePass(
     log: appendLog(state.log, `${playerName} ficou sem jogadas.`),
   };
 
-  // Express: any block ends the game immediately
-  // Classic: only end after both players pass consecutively
-  if (state.mode === 'express' || next.consecutivePasses >= 2) {
+  // Game ends only when both players pass consecutively (regardless of mode)
+  if (next.consecutivePasses >= 2) {
     return finishBlocked(next);
   }
 
@@ -289,24 +288,12 @@ function resolveAfterAction(
     });
   }
 
-  const nextState: OnlineGameState = {
+  return {
     ...state,
     currentTurn: opponent(role),
     consecutivePasses: 0,
     turn: state.turn + 1,
   };
-
-  // In express mode, if the next player has no moves, end immediately
-  if (nextState.mode === 'express' && !canOnlinePlayerMove(nextState, opponent(role))) {
-    const nextName = opponent(role) === 'p1' ? state.p1Name : state.p2Name;
-    const withLog = {
-      ...nextState,
-      log: appendLog(nextState.log, `${nextName} ficou sem jogadas.`),
-    };
-    return finishBlocked(withLog);
-  }
-
-  return nextState;
 }
 
 function finishBlocked(state: OnlineGameState): OnlineGameState {
