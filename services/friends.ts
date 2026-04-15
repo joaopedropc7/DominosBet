@@ -10,41 +10,13 @@ export async function findProfileByNickname(nickname: string): Promise<ProfileRo
 
 /** Send a friend request to a user by their profile id (also creates a notification) */
 export async function sendFriendRequest(addresseeId: string): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Não autenticado.');
-
-  // Create the friendship
-  const { data: friendship, error } = await supabase
-    .from('friendships')
-    .insert({ requester_id: user.id, addressee_id: addresseeId })
-    .select('id')
-    .single();
-
+  const { error } = await supabase.rpc('send_friend_request', {
+    p_addressee_id: addresseeId,
+  });
   if (error) {
-    if (error.code === '23505') throw new Error('Solicitação já enviada.');
+    if (error.message.includes('Solicitação já enviada')) throw new Error('Solicitação já enviada.');
     throw new Error(error.message);
   }
-
-  // Send a notification to the addressee (best-effort — doesn't fail if table is missing)
-  try {
-    const { data: me } = await supabase
-      .from('profiles')
-      .select('display_name')
-      .eq('id', user.id)
-      .single();
-
-    if (me && friendship) {
-      await supabase.from('notifications').insert({
-        user_id: addresseeId,
-        type: 'friend_request',
-        payload: {
-          requester_id: user.id,
-          requester_name: me.display_name,
-          friendship_id: friendship.id,
-        },
-      });
-    }
-  } catch { /* notifications are best-effort */ }
 }
 
 /** Accept a pending friend request (also marks the notification as read) */
