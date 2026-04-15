@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -17,9 +18,12 @@ import { formatCoins } from '@/utils/format';
 
 export function NotificationsScreenView() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]             = useState(true);
+  const [loadError, setLoadError]         = useState('');
 
   const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError('');
     try {
       const data = await listNotifications();
       setNotifications(data);
@@ -29,12 +33,15 @@ export function NotificationsScreenView() {
         .filter(n => !n.read && n.type === 'friend_accepted')
         .map(n => n.id);
       if (infoIds.length > 0) await markNotificationsRead(infoIds);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'Erro ao carregar notificações.');
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  // Reload every time the tab comes into focus (tab stays mounted between switches)
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   function dismiss(id: string) {
     setNotifications(prev => prev.filter(n => n.id !== id));
@@ -47,6 +54,15 @@ export function NotificationsScreenView() {
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator color={theme.colors.primary} />
+        </View>
+      ) : loadError !== '' ? (
+        <View style={styles.center}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={40} color={theme.colors.danger} />
+          <Text style={styles.emptyTitle}>Erro ao carregar</Text>
+          <Text style={styles.emptySub}>{loadError}</Text>
+          <Pressable onPress={load} style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.7 }]}>
+            <Text style={styles.retryText}>Tentar novamente</Text>
+          </Pressable>
         </View>
       ) : notifications.length === 0 ? (
         <View style={styles.center}>
@@ -222,6 +238,20 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   list: { gap: theme.spacing.sm },
+  retryBtn: {
+    marginTop: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.outline,
+  },
+  retryText: {
+    color: theme.colors.text,
+    fontFamily: theme.typography.fontFamily.bodyBold,
+    fontSize: 14,
+  },
 
   row: { flexDirection: 'row', gap: theme.spacing.sm, marginBottom: theme.spacing.sm },
   iconWrap: {
