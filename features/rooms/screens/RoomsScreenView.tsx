@@ -32,6 +32,8 @@ export function RoomsScreenView() {
   const [joinCode, setJoinCode]         = useState('');
   const [cancelingId, setCancelingId]   = useState<string | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [feeFilter, setFeeFilter]       = useState<number | null>(null);
+  const [modeFilter, setModeFilter]     = useState<'classic' | 'express' | null>(null);
 
   const loadAll = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -78,6 +80,12 @@ export function RoomsScreenView() {
   function handleJoinRoom(inviteCode: string) {
     router.push({ pathname: '/(main)/entrar/[code]', params: { code: inviteCode } } as any);
   }
+
+  const filteredRooms = availableRooms.filter((r) => {
+    if (feeFilter !== null && r.entry_fee !== feeFilter) return false;
+    if (modeFilter !== null && r.mode !== modeFilter) return false;
+    return true;
+  });
 
   return (
     <Screen withBottomNav>
@@ -142,20 +150,62 @@ export function RoomsScreenView() {
             <View style={styles.section}>
               <View style={styles.sectionRow}>
                 <Text style={styles.sectionTitle}>Salas abertas</Text>
-                <Text style={styles.sectionCount}>{availableRooms.length}</Text>
+                <Text style={styles.sectionCount}>{filteredRooms.length}</Text>
               </View>
 
-              {availableRooms.length === 0 ? (
+              {/* Filter chips */}
+              <View style={styles.filtersWrap}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersRow}>
+                  {/* Mode filters */}
+                  {([null, 'classic', 'express'] as const).map((m) => {
+                    const label = m === null ? 'Todos' : m === 'classic' ? 'Clássico' : 'Expresso';
+                    const active = modeFilter === m;
+                    return (
+                      <Pressable
+                        key={`mode-${m}`}
+                        onPress={() => setModeFilter(active ? null : m)}
+                        style={[styles.chip, active && styles.chipActive]}
+                      >
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                  <View style={styles.chipDivider} />
+                  {/* Fee filters */}
+                  {[10, 20, 50, 100, 200].map((fee) => {
+                    const active = feeFilter === fee;
+                    return (
+                      <Pressable
+                        key={`fee-${fee}`}
+                        onPress={() => setFeeFilter(active ? null : fee)}
+                        style={[styles.chip, active && styles.chipActive]}
+                      >
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>{fee} moedas</Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
+              {filteredRooms.length === 0 ? (
                 <Card variant="low">
                   <View style={styles.emptyState}>
                     <MaterialCommunityIcons name="door-open" size={32} color={theme.colors.textFaint} />
-                    <Text style={styles.emptyText}>Nenhuma sala aguardando jogadores.</Text>
-                    <Text style={styles.emptySubText}>Crie uma sala e convide seus amigos!</Text>
+                    <Text style={styles.emptyText}>
+                      {availableRooms.length > 0
+                        ? 'Nenhuma sala com esses filtros.'
+                        : 'Nenhuma sala aguardando jogadores.'}
+                    </Text>
+                    <Text style={styles.emptySubText}>
+                      {availableRooms.length > 0
+                        ? 'Tente remover alguns filtros.'
+                        : 'Crie uma sala e convide seus amigos!'}
+                    </Text>
                   </View>
                 </Card>
               ) : (
                 <View style={styles.roomList}>
-                  {availableRooms.map((room) => (
+                  {filteredRooms.map((room) => (
                     <AvailableRoomCard
                       key={room.room_id}
                       room={room}
@@ -410,6 +460,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: theme.spacing.xs,
     textAlign: 'right',
+  },
+
+  // Filters
+  filtersWrap: { marginBottom: theme.spacing.xs },
+  filtersRow: { flexDirection: 'row', gap: theme.spacing.xs, alignItems: 'center' },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.surfaceHigh,
+    borderWidth: 1,
+    borderColor: theme.colors.outline,
+  },
+  chipActive: {
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: theme.colors.primary,
+  },
+  chipText: {
+    color: theme.colors.textFaint,
+    fontFamily: theme.typography.fontFamily.bodyBold,
+    fontSize: 12,
+  },
+  chipTextActive: { color: theme.colors.primary },
+  chipDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: theme.colors.outline,
+    marginHorizontal: 2,
   },
 
   // Available rooms

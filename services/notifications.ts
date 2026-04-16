@@ -26,14 +26,9 @@ export type AppNotification =
   | { id: string; user_id: string; type: 'friend_request';  payload: FriendRequestPayload;  read: boolean; created_at: string }
   | { id: string; user_id: string; type: 'friend_accepted'; payload: FriendAcceptedPayload; read: boolean; created_at: string };
 
-/** List unread notifications for the current user. */
+/** List unread notifications for the current user (via SECURITY DEFINER RPC). */
 export async function listNotifications(): Promise<AppNotification[]> {
-  const { data, error } = await supabase
-    .from('notifications')
-    .select('*')
-    .eq('read', false)
-    .order('created_at', { ascending: false })
-    .limit(50);
+  const { data, error } = await supabase.rpc('list_notifications');
   if (error) throw new Error(error.message);
   return (data ?? []) as AppNotification[];
 }

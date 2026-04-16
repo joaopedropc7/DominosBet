@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '@/components/base/Avatar';
 import { Button } from '@/components/base/Button';
@@ -44,9 +45,20 @@ export function EditProfileScreenView() {
       : 'Você pode definir seu nome agora. Depois disso, novas mudanças só serão liberadas a cada 7 dias.';
 
   return (
-    <Screen withBottomNav>
+    <Screen>
+      {/* Top bar with back button */}
+      <View style={styles.topBar}>
+        <Pressable
+          onPress={() => router.back()}
+          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.7 }]}
+        >
+          <MaterialCommunityIcons name="arrow-left" size={20} color={theme.colors.textMuted} />
+        </Pressable>
+        <Text style={styles.topBarTitle}>Editar perfil</Text>
+        <View style={styles.backBtn} pointerEvents="none" />
+      </View>
+
       <View style={styles.header}>
-        <Text style={styles.title}>Editar perfil</Text>
         <Text style={styles.subtitle}>Atualize seu nome público e escolha um avatar para representar sua mesa.</Text>
       </View>
 
@@ -95,13 +107,27 @@ export function EditProfileScreenView() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    gap: theme.spacing.xs,
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: theme.spacing.md,
   },
-  title: {
+  backBtn: {
+    width: 36, height: 36,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1, borderColor: theme.colors.outline,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  topBarTitle: {
     color: theme.colors.text,
     fontFamily: theme.typography.fontFamily.display,
-    fontSize: 30,
+    fontSize: 20,
+  },
+  header: {
+    gap: theme.spacing.xs,
+    paddingBottom: theme.spacing.xs,
   },
   subtitle: {
     color: theme.colors.textSoft,

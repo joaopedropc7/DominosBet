@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
+import { createPrivateRoom } from '@/services/private-room';
+import { sendRematchInvite } from '@/services/ranking';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   ActivityIndicator,
@@ -38,8 +40,9 @@ export function OnlineMatchScreenView({
 }: OnlineMatchScreenViewProps) {
   const { isCompact, width } = useResponsive();
   const { height: screenH } = useWindowDimensions();
-  const [boardBoxH, setBoardBoxH] = useState(() => Math.max(180, screenH * 0.42));
+  const [boardBoxH, setBoardBoxH]       = useState(() => Math.max(180, screenH * 0.42));
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
+  const [rematching, setRematching]     = useState(false);
 
   const {
     phase,
@@ -184,6 +187,25 @@ export function OnlineMatchScreenView({
     if (!isMyturn || phase !== 'playing') return;
     if (!myLegalMoves.some((m) => m.tileId === tileId)) return;
     setSelectedTileId((cur) => (cur === tileId ? null : tileId));
+  }
+
+  async function handleRematch() {
+    if (!room || !game) return;
+    setRematching(true);
+    try {
+      const opponentId = room.player1_id === myUserId ? room.player2_id : room.player1_id;
+      const fee  = room.entry_fee ?? 20;
+      const mode = (game.mode ?? 'classic') as 'classic' | 'express';
+      const { roomId: newRoomId, inviteCode } = await createPrivateRoom(fee, mode, undefined, 'Revanche');
+      // Best-effort invite — won't fail if not friends
+      try { await sendRematchInvite(opponentId!, newRoomId, inviteCode); } catch { }
+      router.replace({
+        pathname: '/(main)/sala-privada',
+        params: { roomId: newRoomId, inviteCode, entryFee: String(fee), roomName: 'Revanche' },
+      } as any);
+    } catch {
+      setRematching(false);
+    }
   }
 
   function handleAbandon() {
@@ -483,6 +505,20 @@ export function OnlineMatchScreenView({
               ))}
 
               <View style={styles.resultActions}>
+                {/* Rematch — same opponent, same settings */}
+                <Pressable
+                  onPress={handleRematch}
+                  disabled={rematching}
+                  style={({ pressed }) => [styles.resultButton, styles.resultButtonRematch, pressed && styles.resultButtonPressed, rematching && { opacity: 0.6 }]}
+                >
+                  {rematching
+                    ? <ActivityIndicator size="small" color={theme.colors.primary} />
+                    : <MaterialCommunityIcons name="sword-cross" size={16} color={theme.colors.primary} />}
+                  <Text style={styles.resultButtonTextRematch}>
+                    {rematching ? 'Criando sala…' : `Revanche com ${opponentName}`}
+                  </Text>
+                </Pressable>
+
                 <Pressable
                   onPress={() => router.replace({
                     pathname: '/(main)/busca-partida',
@@ -644,7 +680,15 @@ const styles = StyleSheet.create({
   resultActions: { width: '100%', gap: theme.spacing.sm, marginTop: theme.spacing.sm },
   resultButton: { borderRadius: 999, paddingVertical: 13, paddingHorizontal: 32, width: '100%', alignItems: 'center', backgroundColor: theme.colors.surfaceHigh, borderWidth: 1, borderColor: theme.colors.outline },
   resultButtonPrimary: { backgroundColor: '#F2CA50', borderColor: 'transparent' },
+  resultButtonRematch: {
+    flexDirection: 'row',
+    gap: 8,
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.primary,
+    borderWidth: 1.5,
+  },
   resultButtonPressed: { transform: [{ scale: 0.97 }] },
   resultButtonText: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.display, fontSize: 15 },
   resultButtonTextDark: { color: '#131313', fontFamily: theme.typography.fontFamily.display, fontSize: 15 },
+  resultButtonTextRematch: { color: theme.colors.primary, fontFamily: theme.typography.fontFamily.display, fontSize: 15 },
 });

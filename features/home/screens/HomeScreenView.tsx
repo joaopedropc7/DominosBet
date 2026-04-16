@@ -97,6 +97,19 @@ export function HomeScreenView() {
         </View>
       </View>
 
+      {/* Ranking banner */}
+      <Pressable
+        onPress={() => router.push('/(main)/ranking')}
+        style={({ pressed }) => [styles.rankingBanner, pressed && styles.rankingBannerPressed]}
+      >
+        <MaterialCommunityIcons name="trophy-outline" size={24} color="#241A00" />
+        <View style={styles.rankingBannerInfo}>
+          <Text style={styles.rankingBannerTitle}>Ranking Global</Text>
+          <Text style={styles.rankingBannerSub}>Veja os melhores jogadores</Text>
+        </View>
+        <MaterialCommunityIcons name="chevron-right" size={20} color="#241A00" />
+      </Pressable>
+
       <View style={styles.section}>
         <View style={[styles.sectionHeader, isCompact && styles.sectionHeaderCompact]}>
           <Text style={[styles.sectionTitle, isCompact && styles.sectionTitleCompact]}>Salas Disponíveis</Text>
@@ -135,6 +148,26 @@ export function HomeScreenView() {
 const styles = StyleSheet.create({
   walletCard: {
     gap: theme.spacing.md,
+  },
+  rankingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.lg,
+    padding: theme.spacing.md,
+  },
+  rankingBannerPressed: { opacity: 0.88, transform: [{ scale: 0.98 }] },
+  rankingBannerInfo: { flex: 1 },
+  rankingBannerTitle: {
+    color: '#241A00',
+    fontFamily: theme.typography.fontFamily.display,
+    fontSize: 18,
+  },
+  rankingBannerSub: {
+    color: 'rgba(36,26,0,0.65)',
+    fontFamily: theme.typography.fontFamily.bodyMedium,
+    fontSize: 12,
   },
   modeGrid: {
     flexDirection: 'row',
