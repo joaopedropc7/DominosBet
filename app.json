@@ -3,6 +3,7 @@
     "name": "Dominos Bet",
     "slug": "xdomino",
     "version": "1.0.0",
+    "description": "Jogue dominó online com apostas de moedas, desafie amigos e suba no ranking.",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "dominos-bet",
