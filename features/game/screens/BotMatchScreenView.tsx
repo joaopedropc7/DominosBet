@@ -28,6 +28,17 @@ export function BotMatchScreenView() {
     [match.board, width, boardBoxH],
   );
 
+  // Cache tile positions the first time each tile is placed.
+  // Once cached, a position never changes — prevents already-placed tiles from moving.
+  type TileLayout = { left: number; top: number; swapPips: boolean; orientation: 'horizontal' | 'vertical' };
+  const tilePositionCache = useRef<Record<string, TileLayout>>({});
+  match.board.forEach((tile, i) => {
+    if (!(tile.id in tilePositionCache.current)) {
+      const pos = boardLayout.positions[i];
+      if (pos) tilePositionCache.current[tile.id] = pos as TileLayout;
+    }
+  });
+
   // Result overlay animation
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const overlayScale = useRef(new Animated.Value(0.8)).current;
@@ -92,6 +103,7 @@ export function BotMatchScreenView() {
     overlayOpacity.setValue(0);
     overlayScale.setValue(0.8);
     setSelectedTileId(null);
+    tilePositionCache.current = {}; // clear positions for the new game
     setMatch(createBotMatch());
   }
 
@@ -148,9 +160,9 @@ export function BotMatchScreenView() {
             onLayout={(e) => setBoardBoxH(e.nativeEvent.layout.height)}>
             <View style={[styles.boardCanvas, { width: boardLayout.width, height: boardLayout.height }]}>
 
-              {/* Real tiles */}
-              {match.board.map((tile, index) => {
-                const layout = boardLayout.positions[index];
+              {/* Real tiles — positions come from the cache (fixed once placed) */}
+              {match.board.map((tile) => {
+                const layout = tilePositionCache.current[tile.id];
                 if (!layout) return null;
                 return (
                   <View

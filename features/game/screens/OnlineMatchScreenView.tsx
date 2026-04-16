@@ -168,6 +168,27 @@ export function OnlineMatchScreenView({
     [game?.board, width, boardBoxH],
   );
 
+  // Cache tile positions the first time each tile is placed.
+  // Once cached, a position never changes — prevents already-placed tiles from moving.
+  type TileLayout = { left: number; top: number; swapPips: boolean; orientation: 'horizontal' | 'vertical' };
+  const tilePositionCache = useRef<Record<string, TileLayout>>({});
+
+  // Reset cache when a new room/game starts
+  const prevRoomId = useRef<string>(roomId);
+  if (prevRoomId.current !== roomId) {
+    prevRoomId.current = roomId;
+    tilePositionCache.current = {};
+  }
+
+  if (boardLayout && game?.board) {
+    game.board.forEach((tile, i) => {
+      if (!(tile.id in tilePositionCache.current)) {
+        const pos = boardLayout.positions[i];
+        if (pos) tilePositionCache.current[tile.id] = pos as TileLayout;
+      }
+    });
+  }
+
   // ── Auto-pass when no moves and can't draw ────────────────────────────────
   useEffect(() => {
     if (!game || !isMyturn || canPlay || canDraw || phase !== 'playing') return;
@@ -322,8 +343,8 @@ export function OnlineMatchScreenView({
           >
             {boardLayout && (
               <View style={[styles.boardCanvas, { width: boardLayout.width, height: boardLayout.height }]}>
-                {game?.board.map((tile, index) => {
-                  const layout = boardLayout.positions[index];
+                {game?.board.map((tile) => {
+                  const layout = tilePositionCache.current[tile.id];
                   if (!layout) return null;
                   return (
                     <View key={tile.id} style={[styles.boardTileAbsolute, { left: layout.left, top: layout.top }]}>

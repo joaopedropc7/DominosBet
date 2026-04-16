@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -6,29 +6,31 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { Card } from '@/components/base/Card';
 import { Screen } from '@/components/base/Screen';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { useAuth } from '@/hooks/useAuth';
 import { acceptFriendRequest, removeFriendship } from '@/services/friends';
 import {
   listNotifications,
   markNotificationsRead,
   type AppNotification,
 } from '@/services/notifications';
+import { supabase } from '@/services/supabase';
 import { theme } from '@/theme';
 import { formatTimelineLabel } from '@/utils/date';
 import { formatCoins } from '@/utils/format';
 
 export function NotificationsScreenView() {
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading]             = useState(true);
   const [loadError, setLoadError]         = useState('');
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setLoadError('');
     try {
       const data = await listNotifications();
       setNotifications(data);
-      // Only auto-mark informational notifications as read (friend_accepted).
-      // Actionable ones (friend_request, room_invite) stay unread until the user acts.
       const infoIds = data
         .filter(n => !n.read && n.type === 'friend_accepted')
         .map(n => n.id);
@@ -40,7 +42,36 @@ export function NotificationsScreenView() {
     }
   }, []);
 
-  // Reload every time the tab comes into focus (tab stays mounted between switches)
+  // Subscribe to real-time inserts on the notifications table
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`notifications:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          // Silent reload — no spinner, just refresh the list
+          load(true);
+        },
+      )
+      .subscribe();
+
+    channelRef.current = channel;
+
+    return () => {
+      supabase.removeChannel(channel);
+      channelRef.current = null;
+    };
+  }, [user?.id, load]);
+
+  // Full reload every time the tab comes into focus
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   function dismiss(id: string) {
