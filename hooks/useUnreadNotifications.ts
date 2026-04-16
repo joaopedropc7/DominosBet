@@ -24,7 +24,7 @@ export function useUnreadNotifications(): number {
       )
       .subscribe();
 
-    return () => { channel.unsubscribe(); };
+    return () => { supabase.removeChannel(channel); };
   }, [user?.id]);
 
   return count;

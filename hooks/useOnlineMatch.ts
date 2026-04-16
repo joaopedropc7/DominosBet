@@ -269,7 +269,7 @@ export function useOnlineMatch({
 
     return () => {
       mounted = false;
-      channel.unsubscribe();
+      supabase.removeChannel(channel);
     };
   }, [roomId, applyRoomUpdate]);
 

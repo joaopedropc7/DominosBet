@@ -67,7 +67,7 @@ export function RoomLobbyScreenView({
         (payload) => {
           const updated = payload.new as MatchRoomRow;
           if (updated.status === 'playing' && updated.player2_id) {
-            channel.unsubscribe();
+            supabase.removeChannel(channel);
             router.replace({
               pathname: '/(main)/jogo-online',
               params: { roomId, role: 'p1' },
@@ -77,7 +77,7 @@ export function RoomLobbyScreenView({
       )
       .subscribe();
 
-    return () => { channel.unsubscribe(); };
+    return () => { supabase.removeChannel(channel); };
   }, [roomId]);
 
   async function handleShare() {

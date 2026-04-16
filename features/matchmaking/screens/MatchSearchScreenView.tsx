@@ -66,7 +66,7 @@ export function MatchSearchScreenView({ mode, entryFee }: MatchSearchScreenViewP
               const updated = payload.new as MatchRoomRow;
               if (updated.status === 'playing' && updated.player2_id) {
                 setPhase('found');
-                channel?.unsubscribe();
+                if (channel) supabase.removeChannel(channel);
                 setTimeout(() => {
                   if (mounted) navigateToMatch(roomId, 'p1');
                 }, 800);
@@ -85,7 +85,7 @@ export function MatchSearchScreenView({ mode, entryFee }: MatchSearchScreenViewP
 
     return () => {
       mounted = false;
-      channel?.unsubscribe();
+      if (channel) supabase.removeChannel(channel);
     };
   }, []);
 
