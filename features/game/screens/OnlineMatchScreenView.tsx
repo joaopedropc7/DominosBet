@@ -17,12 +17,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useOnlineMatch } from '@/hooks/useOnlineMatch';
 import { canOnlinePlayerMove, getOnlineLegalMoves } from '@/game-engine/online-game';
-import type { OnlinePlayedTile } from '@/types/database';
 import { ENTRY_FEE, WINNER_REWARD } from '@/services/online-match';
 import { useResponsive } from '@/hooks/useResponsive';
 import { theme } from '@/theme';
 import { formatCoins } from '@/utils/format';
-import { SLOT_PX, initBoardSlots, placePiece, placementToPixels } from '@/game-engine/board-slots';
+import { computeLinearLayout } from '@/game-engine/board-slots';
 import { DominoTileView } from '../components/DominoTileView';
 
 interface OnlineMatchScreenViewProps {
@@ -164,30 +163,29 @@ export function OnlineMatchScreenView({
   const canDraw = isClassic && (game?.boneyard.length ?? 0) > 0;
 
   const boardLayout = useMemo(
-    () => game ? createBoardLayout(game.board, width, boardBoxH) : null,
-    [game?.board, width, boardBoxH],
+    () => game ? computeLinearLayout(game.board, boardBoxH, width) : null,
+    [game?.board, boardBoxH, width],
   );
 
-  // Cache tile positions the first time each tile is placed.
-  // Once cached, a position never changes — prevents already-placed tiles from moving.
-  type TileLayout = { left: number; top: number; swapPips: boolean; orientation: 'horizontal' | 'vertical' };
-  const tilePositionCache = useRef<Record<string, TileLayout>>({});
+  const boardScrollRef = useRef<ScrollView>(null);
+  const hasScrolledRef = useRef(false);
 
-  // Reset cache when a new room/game starts
+  // Reset scroll flag when room changes
   const prevRoomId = useRef<string>(roomId);
   if (prevRoomId.current !== roomId) {
     prevRoomId.current = roomId;
-    tilePositionCache.current = {};
+    hasScrolledRef.current = false;
   }
 
-  if (boardLayout && game?.board) {
-    game.board.forEach((tile, i) => {
-      if (!(tile.id in tilePositionCache.current)) {
-        const pos = boardLayout.positions[i];
-        if (pos) tilePositionCache.current[tile.id] = pos as TileLayout;
-      }
-    });
-  }
+  // Scroll to center the anchor tile when the first tile is placed
+  const boardLength = game?.board.length ?? 0;
+  useEffect(() => {
+    if (boardLength === 1 && !hasScrolledRef.current && boardScrollRef.current && boardLayout) {
+      hasScrolledRef.current = true;
+      boardScrollRef.current.scrollTo({ x: boardLayout.anchorScrollX, animated: false });
+    }
+    if (boardLength === 0) hasScrolledRef.current = false;
+  }, [boardLength, boardLayout?.anchorScrollX]);
 
   // ── Auto-pass when no moves and can't draw ────────────────────────────────
   useEffect(() => {
@@ -342,42 +340,50 @@ export function OnlineMatchScreenView({
             onLayout={(e) => setBoardBoxH(e.nativeEvent.layout.height)}
           >
             {boardLayout && (
-              <View style={[styles.boardCanvas, { width: boardLayout.width, height: boardLayout.height }]}>
+              <ScrollView
+                ref={boardScrollRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                scrollEventThrottle={16}
+                contentContainerStyle={{ width: boardLayout.canvasWidth, height: boardLayout.canvasHeight }}
+              >
+                {/* Tiles — stable positions from computeLinearLayout */}
                 {game?.board.map((tile) => {
-                  const layout = tilePositionCache.current[tile.id];
-                  if (!layout) return null;
+                  const pos = boardLayout.tilePositions.find((p) => p.tileId === tile.id);
+                  if (!pos) return null;
                   return (
-                    <View key={tile.id} style={[styles.boardTileAbsolute, { left: layout.left, top: layout.top }]}>
+                    <View key={tile.id} style={[styles.boardTileAbsolute, { left: pos.left, top: pos.top }]}>
                       <DominoTileView
-                        tile={layout.swapPips ? { ...tile, left: tile.right, right: tile.left } : tile}
+                        tile={pos.swapPips ? { ...tile, left: tile.right, right: tile.left } : tile}
                         size="xs"
-                        orientation={layout.orientation}
+                        orientation={pos.orientation}
                       />
                     </View>
                   );
                 })}
 
-                {availableSides.includes('left') && boardLayout.leftGhostPos && (
+                {/* Ghost drop zones */}
+                {availableSides.includes('left') && boardLayout.leftGhost && (
                   <Pressable
                     onPress={() => selectedTile && playTile(selectedTile.id, 'left')}
                     style={({ pressed }) => [
                       styles.ghostSlot,
-                      { left: boardLayout.leftGhostPos.left, top: boardLayout.leftGhostPos.top, width: boardLayout.leftGhostPos.width, height: boardLayout.leftGhostPos.height },
+                      { left: boardLayout.leftGhost!.left, top: boardLayout.leftGhost!.top, width: boardLayout.leftGhost!.width, height: boardLayout.leftGhost!.height },
                       pressed && styles.ghostSlotPressed,
                     ]}
                   />
                 )}
-                {availableSides.includes('right') && boardLayout.rightGhostPos && (
+                {availableSides.includes('right') && boardLayout.rightGhost && (
                   <Pressable
                     onPress={() => selectedTile && playTile(selectedTile.id, 'right')}
                     style={({ pressed }) => [
                       styles.ghostSlot,
-                      { left: boardLayout.rightGhostPos.left, top: boardLayout.rightGhostPos.top, width: boardLayout.rightGhostPos.width, height: boardLayout.rightGhostPos.height },
+                      { left: boardLayout.rightGhost!.left, top: boardLayout.rightGhost!.top, width: boardLayout.rightGhost!.width, height: boardLayout.rightGhost!.height },
                       pressed && styles.ghostSlotPressed,
                     ]}
                   />
                 )}
-              </View>
+              </ScrollView>
             )}
           </View>
         </View>
@@ -566,51 +572,6 @@ export function OnlineMatchScreenView({
       )}
     </SafeAreaView>
   );
-}
-
-// ── Board layout ────────────────────────────────────────────────────────────
-type GhostPos = { left: number; top: number; width: number; height: number };
-
-function createBoardLayout(board: OnlinePlayedTile[], viewportWidth: number, containerH: number) {
-  const PAD_H = 4, PAD_V = 10;
-  const S = SLOT_PX;
-  const canvasW = viewportWidth - 16;
-  const cols = Math.max(4, Math.floor((canvasW - PAD_H * 2) / S));
-  const rowLimit = Math.max(2, Math.floor((containerH - PAD_V * 2) / S));
-  const totalRows = rowLimit;
-
-  const startCol = Math.floor((cols - 2) / 2);
-  const startRow = Math.floor(rowLimit / 2);
-  const slotBoard = initBoardSlots(cols, rowLimit, { col: startCol, row: startRow });
-  for (const tile of board) placePiece(slotBoard, tile as any);
-
-  let { cursor, direction } = slotBoard;
-  let ghostIsVertical = slotBoard.cornerPending > 0;
-
-  if (cursor.col < 0 || cursor.col >= cols) {
-    const end = slotBoard.chainEndCoord ?? { col: direction === 'ltr' ? cols - 1 : 0, row: cursor.row };
-    direction = direction === 'ltr' ? 'rtl' : 'ltr';
-    cursor = { col: end.col, row: end.row + 1 };
-    ghostIsVertical = true;
-  }
-
-  const positions = board.map((_, i) => {
-    const p = slotBoard.placements[i];
-    if (!p) return null;
-    const px = placementToPixels(p, totalRows, PAD_H, PAD_V);
-    return { left: px.left, top: px.top, swapPips: p.swapPips, orientation: p.orientation };
-  });
-
-  const rightGhostPos: GhostPos = ghostIsVertical
-    ? { left: PAD_H + cursor.col * S, top: PAD_V + (totalRows - 1 - (cursor.row + 1)) * S, width: S, height: S * 2 }
-    : { left: PAD_H + (direction === 'ltr' ? cursor.col : cursor.col - 1) * S, top: PAD_V + (totalRows - 1 - cursor.row) * S, width: S * 2, height: S };
-
-  const firstP = slotBoard.placements[0];
-  const leftGhostPos: GhostPos = firstP
-    ? { left: PAD_H + Math.min(firstP.slotA.col, firstP.slotB.col) * S, top: PAD_V + (totalRows - 1 - Math.max(firstP.slotA.row, firstP.slotB.row)) * S, width: firstP.orientation === 'vertical' ? S : S * 2, height: firstP.orientation === 'vertical' ? S * 2 : S }
-    : { left: PAD_H, top: PAD_V, width: S * 2, height: S };
-
-  return { width: canvasW, height: containerH, positions, leftGhostPos, rightGhostPos };
 }
 
 // ── Styles ──────────────────────────────────────────────────────────────────

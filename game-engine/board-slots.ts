@@ -352,6 +352,150 @@ export function getBoardGrid(board: BoardSlotState): (number | null)[][] {
  */
 export const SLOT_PX = 28;
 
+// ─── Linear horizontal board layout ──────────────────────────────────────────
+//
+// Simple matrix model for mobile:
+//   • The board is a single horizontal chain in a ScrollView.
+//   • Each slot is SLOT_PX × SLOT_PX (28 × 28 px).
+//   • Normal tile  (left ≠ right): 2 slots wide, 1 slot tall — horizontal.
+//   • Double tile  (left = right):  1 slot wide, 2 slots tall — vertical,
+//                                   centered on the chain row (sticks upward).
+//   • The first tile played is the ANCHOR at slot column LINEAR_ANCHOR_SLOT.
+//     Left-side plays grow leftward; right-side plays grow rightward.
+//     Once placed, a tile's column NEVER changes — no reorganization.
+//   • The canvas is LINEAR_TOTAL_SLOTS wide, wrapped in a horizontal ScrollView.
+//
+// Tile ID convention (from the game engine):
+//   First tile:   original ID  (e.g. "3-5")
+//   Left plays:   "${id}-l"
+//   Right plays:  "${id}-r"
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const LINEAR_TOTAL_SLOTS = 200; // slots in the full canvas (100 left + 100 right)
+export const LINEAR_ANCHOR_SLOT = 100; // column where the first tile is placed
+
+export type LinearTilePos = {
+  tileId: string;
+  left: number;        // pixel x on the canvas
+  top: number;         // pixel y on the canvas
+  orientation: 'horizontal' | 'vertical';
+  swapPips: boolean;
+};
+
+export type LinearGhostPos = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
+export type LinearBoardLayout = {
+  canvasWidth: number;
+  canvasHeight: number;
+  tilePositions: LinearTilePos[];
+  rightGhost: LinearGhostPos | null;
+  leftGhost: LinearGhostPos | null;
+  /** x offset to scroll so the first tile is centered on screen */
+  anchorScrollX: number;
+};
+
+/**
+ * Compute a stable, linear horizontal layout for the domino board.
+ *
+ * @param board       The board array in chain order: board[0] = leftmost tile.
+ * @param containerH  Available height of the board view in pixels.
+ * @param screenW     Width of the visible screen/viewport in pixels.
+ */
+export function computeLinearLayout(
+  board: { id: string; left: number; right: number }[],
+  containerH: number,
+  screenW: number,
+): LinearBoardLayout {
+  const S = SLOT_PX;
+  const TOTAL = LINEAR_TOTAL_SLOTS;
+  const ANCHOR = LINEAR_ANCHOR_SLOT;
+  const PAD_H = 8;
+
+  const canvasWidth  = TOTAL * S + PAD_H * 2;
+  const canvasHeight = containerH;
+
+  // 3 visual rows: row 0 = above chain (double top), row 1 = chain, row 2 = below chain
+  const CHAIN_ROW = 1;
+  const ROWS = 3;
+  const padV = Math.max(4, (containerH - ROWS * S) / 2);
+  const chainTop = padV + CHAIN_ROW * S; // pixel y of the chain row top
+
+  // ── Assign absolute slot columns ────────────────────────────────────────────
+  // The anchor tile is the first one played (no "-l" or "-r" suffix).
+  // Left tiles are prepended to board[] — they have negative distance from ANCHOR.
+  // Right tiles are appended to board[] — they have positive distance from ANCHOR.
+
+  const anchorIdx = board.findIndex(
+    (t) => !t.id.endsWith('-l') && !t.id.endsWith('-r'),
+  );
+  const anchorIdxEff = anchorIdx === -1 ? 0 : anchorIdx;
+
+  const slotCol = new Map<string, number>();
+
+  // Anchor + right-of-anchor → grow rightward
+  let col = ANCHOR;
+  for (let i = anchorIdxEff; i < board.length; i++) {
+    const tile = board[i];
+    slotCol.set(tile.id, col);
+    col += tile.left === tile.right ? 1 : 2;
+  }
+
+  // Left-of-anchor → grow leftward
+  col = ANCHOR;
+  for (let i = anchorIdxEff - 1; i >= 0; i--) {
+    const tile = board[i];
+    const w = tile.left === tile.right ? 1 : 2;
+    col -= w;
+    slotCol.set(tile.id, col);
+  }
+
+  const colToX = (c: number) => PAD_H + c * S;
+
+  // ── Tile pixel positions ────────────────────────────────────────────────────
+  const tilePositions: LinearTilePos[] = board.map((tile) => {
+    const c = slotCol.get(tile.id) ?? ANCHOR;
+    const isDouble = tile.left === tile.right;
+    return {
+      tileId: tile.id,
+      left: colToX(c),
+      // Doubles stick UPWARD from the chain row (top = chainTop - S)
+      // Normal tiles sit ON the chain row (top = chainTop)
+      top: isDouble ? chainTop - S : chainTop,
+      orientation: isDouble ? 'vertical' : 'horizontal',
+      swapPips: false, // orientTileForBoard already handles orientation
+    };
+  });
+
+  // ── Ghost positions (drop zones) ────────────────────────────────────────────
+  const ghostW   = 2 * S;
+  const ghostH   = S;
+  const ghostTop = chainTop;
+
+  let rightGhost: LinearGhostPos | null = null;
+  let leftGhost:  LinearGhostPos | null = null;
+
+  if (board.length > 0) {
+    const rt  = board[board.length - 1];
+    const rc  = slotCol.get(rt.id) ?? ANCHOR;
+    const rw  = rt.left === rt.right ? 1 : 2;
+    rightGhost = { left: colToX(rc + rw), top: ghostTop, width: ghostW, height: ghostH };
+
+    const lt  = board[0];
+    const lc  = slotCol.get(lt.id) ?? ANCHOR;
+    leftGhost  = { left: colToX(lc - 2), top: ghostTop, width: ghostW, height: ghostH };
+  }
+
+  // ── Scroll offset to center the anchor (first tile) on screen ───────────────
+  const anchorScrollX = Math.max(0, colToX(ANCHOR) - screenW / 2 + S);
+
+  return { canvasWidth, canvasHeight, tilePositions, rightGhost, leftGhost, anchorScrollX };
+}
+
 /**
  * Convert a PiecePlacement to absolute pixel coordinates for React Native
  * rendering (absolutely positioned inside the board canvas).
