@@ -9,7 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
+import { Clipboard } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Button } from '@/components/base/Button';
@@ -71,8 +71,8 @@ export function DepositPixView() {
     }
   }
 
-  async function handleCopy() {
-    await Clipboard.setStringAsync(qrcode);
+  function handleCopy() {
+    Clipboard.setString(qrcode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   }
