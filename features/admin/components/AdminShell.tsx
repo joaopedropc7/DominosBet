@@ -14,6 +14,7 @@ const NAV_SECTIONS = [
       { label: 'Dashboard', icon: 'view-dashboard-outline', href: '/admin'          },
       { label: 'Usuários',  icon: 'account-group-outline',  href: '/admin/usuarios' },
       { label: 'Links',     icon: 'link-variant',           href: '/admin/afiliados'},
+      { label: 'Gateway',   icon: 'credit-card-outline',    href: '/admin/gateway'  },
     ],
   },
   {

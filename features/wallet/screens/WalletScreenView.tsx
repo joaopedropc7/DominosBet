@@ -38,7 +38,11 @@ export function WalletScreenView() {
             <Text style={styles.heroValue}>{formatCoins(profile?.balance ?? userMock.balance)}</Text>
             <Text style={styles.heroCurrency}>XD</Text>
           </View>
-          <Button title="Adicionar moedas" icon={<MaterialCommunityIcons name="plus-circle" size={18} color="#241A00" />} />
+          <Button
+            title="Adicionar moedas"
+            icon={<MaterialCommunityIcons name="plus-circle" size={18} color="#241A00" />}
+            onPress={() => router.push('/(main)/depositar')}
+          />
         </View>
       </Card>
 
