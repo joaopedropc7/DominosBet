@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Clipboard, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '@/services/supabase';
 import { theme } from '@/theme';
@@ -26,18 +26,17 @@ function ReadonlyField({ label, value }: { label: string; value: string }) {
   );
 }
 
+const SITE = 'https://dominosbet.com.br';
+
 export function AffiliateContaView() {
   const { affiliate, refreshAffiliate } = useAffiliateGuard();
 
-  const [ownCode, setOwnCode]       = useState('');
-  const [savingCode, setSavingCode] = useState(false);
-  const [codeMsg, setCodeMsg]       = useState('');
-
-  const [pixType, setPixType]       = useState('');
-  const [pixKey, setPixKey]         = useState('');
-  const [savingPix, setSavingPix]   = useState(false);
-  const [pixMsg, setPixMsg]         = useState('');
+  const [pixType, setPixType]         = useState('');
+  const [pixKey, setPixKey]           = useState('');
+  const [savingPix, setSavingPix]     = useState(false);
+  const [pixMsg, setPixMsg]           = useState('');
   const [pixTypeOpen, setPixTypeOpen] = useState(false);
+  const [codeCopied, setCodeCopied]   = useState(false);
 
   if (!affiliate) {
     return (
@@ -47,20 +46,11 @@ export function AffiliateContaView() {
     );
   }
 
-  async function handleSaveCode() {
-    const code = ownCode.trim().toUpperCase();
-    if (!code) { setCodeMsg('Informe um código'); return; }
-    setCodeMsg('');
-    setSavingCode(true);
-    const { error } = await supabase.rpc('update_affiliate_own_code', { p_code: code });
-    setSavingCode(false);
-    if (error) {
-      setCodeMsg(error.message.includes('duplicate') ? 'Código já está em uso' : error.message);
-    } else {
-      setCodeMsg('Código salvo com sucesso!');
-      setOwnCode('');
-      refreshAffiliate();
-    }
+  function handleCopyCode() {
+    if (!affiliate?.own_code) return;
+    Clipboard.setString(`${SITE}/cadastro?ref=${affiliate.own_code}`);
+    setCodeCopied(true);
+    setTimeout(() => setCodeCopied(false), 2000);
   }
 
   async function handleSavePix() {
@@ -114,7 +104,7 @@ export function AffiliateContaView() {
             <View style={styles.dealDivider} />
             <View style={styles.dealItem}>
               <Text style={styles.dealValue}>
-                R$ {affiliate.cpa_amount.toFixed(2).replace('.', ',')}
+                R$ {(affiliate.cpa_amount ?? 0).toFixed(2).replace('.', ',')}
               </Text>
               <Text style={styles.dealLabel}>CPA por FTD</Text>
             </View>
@@ -134,34 +124,26 @@ export function AffiliateContaView() {
       <View style={styles.card}>
         <SectionHeader title="Código de Indicação" />
         <View style={styles.cardBody}>
-          <ReadonlyField label="Código Atual" value={affiliate.own_code ?? '(não definido)'} />
           <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Novo Código</Text>
-            <View style={styles.inputRow}>
-              <TextInput
-                style={[styles.input, { flex: 1 }]}
-                placeholder="Ex: MEUCOD10"
-                placeholderTextColor={theme.colors.textFaint}
-                autoCapitalize="characters"
-                value={ownCode}
-                onChangeText={v => { setOwnCode(v.toUpperCase()); setCodeMsg(''); }}
-              />
-              <TouchableOpacity
-                style={[styles.saveBtn, savingCode && { opacity: 0.6 }]}
-                onPress={handleSaveCode}
-                disabled={savingCode}
-              >
-                {savingCode
-                  ? <ActivityIndicator size="small" color="#000" />
-                  : <Text style={styles.saveBtnText}>Salvar</Text>
-                }
+            <Text style={styles.fieldLabel}>Seu código único</Text>
+            <View style={styles.codeBox}>
+              <Text style={styles.codeValue}>{affiliate.own_code ?? '—'}</Text>
+              <TouchableOpacity onPress={handleCopyCode} style={styles.codeCopyBtn}>
+                <MaterialCommunityIcons
+                  name={codeCopied ? 'check' : 'content-copy'}
+                  size={16}
+                  color={codeCopied ? '#10B981' : theme.colors.textMuted}
+                />
+                <Text style={[styles.codeCopyText, codeCopied && { color: '#10B981' }]}>
+                  {codeCopied ? 'Copiado!' : 'Copiar link'}
+                </Text>
               </TouchableOpacity>
             </View>
-            {codeMsg ? (
-              <Text style={[styles.feedbackText, codeMsg.includes('sucesso') && styles.successText]}>
-                {codeMsg}
-              </Text>
-            ) : null}
+            <Text style={styles.codeHint}>
+              {affiliate.own_code
+                ? `dominosbet.com.br/cadastro?ref=${affiliate.own_code}`
+                : 'Código gerado automaticamente no cadastro'}
+            </Text>
           </View>
         </View>
       </View>
@@ -319,6 +301,44 @@ const styles = StyleSheet.create({
 
   feedbackText: { color: '#EF4444', fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 12 },
   successText: { color: '#10B981' },
+
+  codeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: theme.colors.surfaceInset,
+    borderWidth: 1,
+    borderColor: theme.colors.outline,
+    borderRadius: theme.radius.md,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 12,
+  },
+  codeValue: {
+    color: theme.colors.primary,
+    fontFamily: theme.typography.fontFamily.display,
+    fontSize: 20,
+    letterSpacing: 2,
+  },
+  codeCopyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 6,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.surfaceHigh,
+  },
+  codeCopyText: {
+    color: theme.colors.textMuted,
+    fontFamily: theme.typography.fontFamily.bodyMedium,
+    fontSize: 12,
+  },
+  codeHint: {
+    color: theme.colors.textFaint,
+    fontFamily: theme.typography.fontFamily.body,
+    fontSize: 11,
+    marginTop: 4,
+  },
 
   dealGrid: {
     flexDirection: 'row',

@@ -57,7 +57,6 @@ export function AdminAffiliateCadastrosView() {
   const [saving,    setSaving]    = useState(false);
 
   // Modal editable fields
-  const [ownCode,    setOwnCode]    = useState('');
   const [revshare,   setRevshare]   = useState('');
   const [cpa,        setCpa]        = useState('');
   const [subPct,     setSubPct]     = useState('');
@@ -86,7 +85,6 @@ export function AdminAffiliateCadastrosView() {
 
   function openModal(item: AffiliateRow) {
     setSelected(item);
-    setOwnCode(item.own_code ?? '');
     setRevshare(String(item.revshare_percent ?? 40));
     setCpa((item.cpa_amount ?? 5).toFixed(2));
     setSubPct(String(item.sub_affiliate_percent ?? 10));
@@ -101,7 +99,7 @@ export function AdminAffiliateCadastrosView() {
     const { error: rpcErr } = await supabase.rpc('admin_update_affiliate', {
       p_affiliate_id:          selected.id,
       p_status:                newStatus,
-      p_own_code:              ownCode.trim().toUpperCase() || null,
+      p_own_code:              null,   // código gerado automaticamente, não alterável
       p_notes:                 adminNotes.trim() || null,
       p_revshare_percent:      parseInt(revshare, 10) || 40,
       p_cpa_amount:            parseFloat(cpa) || 5,
@@ -301,17 +299,6 @@ export function AdminAffiliateCadastrosView() {
             {/* Commission fields */}
             <View style={styles.formRow}>
               <View style={styles.formField}>
-                <Text style={styles.fieldLabel}>Código próprio</Text>
-                <TextInput
-                  style={styles.fieldInput}
-                  value={ownCode}
-                  onChangeText={v => setOwnCode(v.toUpperCase())}
-                  autoCapitalize="characters"
-                  placeholder="Ex: MEUCODIGO"
-                  placeholderTextColor={theme.colors.textFaint}
-                />
-              </View>
-              <View style={styles.formField}>
                 <Text style={styles.fieldLabel}>RevShare %</Text>
                 <TextInput
                   style={styles.fieldInput}
@@ -322,9 +309,6 @@ export function AdminAffiliateCadastrosView() {
                   placeholderTextColor={theme.colors.textFaint}
                 />
               </View>
-            </View>
-
-            <View style={styles.formRow}>
               <View style={styles.formField}>
                 <Text style={styles.fieldLabel}>CPA (R$)</Text>
                 <TextInput
@@ -336,6 +320,9 @@ export function AdminAffiliateCadastrosView() {
                   placeholderTextColor={theme.colors.textFaint}
                 />
               </View>
+            </View>
+
+            <View style={styles.formRow}>
               <View style={styles.formField}>
                 <Text style={styles.fieldLabel}>Sub-Afiliado %</Text>
                 <TextInput
