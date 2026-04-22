@@ -16,11 +16,12 @@ export function AuthGate({ children }: PropsWithChildren) {
   useEffect(() => {
     if (isLoading) return;
 
-    const inMainGroup = segments[0] === '(main)';
-    const inAdminGroup = segments[0] === 'admin';
-    const isPublicRoute = publicRoutes.has(pathname);
+    const inMainGroup      = segments[0] === '(main)';
+    const inAdminGroup     = segments[0] === 'admin';
+    const inAfiliadoGroup  = segments[0] === 'afiliado';
+    const isPublicRoute    = publicRoutes.has(pathname);
 
-    if (!session && (inMainGroup || inAdminGroup)) {
+    if (!session && (inMainGroup || inAdminGroup || inAfiliadoGroup)) {
       router.replace('/login');
       return;
     }

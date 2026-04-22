@@ -33,8 +33,8 @@ export function useAffiliateGuard() {
 
     supabase.rpc('get_my_affiliate_profile').then(({ data, error }) => {
       if (error || !data) {
-        // Not an affiliate yet — send to registration
-        router.replace('/seja-afiliado');
+        // User has no affiliate profile — not allowed in this panel
+        router.replace('/(main)/home');
         return;
       }
       setAffiliate(data as AffiliateProfile);
