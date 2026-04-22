@@ -5,7 +5,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { theme } from '@/theme';
 
-const publicRoutes = new Set(['/', '/splash', '/login', '/cadastro']);
+const publicRoutes = new Set(['/', '/splash', '/login', '/cadastro', '/seja-afiliado']);
 
 export function AuthGate({ children }: PropsWithChildren) {
   const { isLoading, session } = useAuth();

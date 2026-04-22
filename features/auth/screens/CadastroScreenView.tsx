@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { router } from 'expo-router';
-import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/base/Button';
 import { Card } from '@/components/base/Card';
 import { Input } from '@/components/base/Input';
@@ -10,8 +10,11 @@ import { useAuth } from '@/hooks/useAuth';
 import { theme } from '@/theme';
 
 export function CadastroScreenView() {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const params = useLocalSearchParams<{ ref?: string }>();
+  const refCode = (params.ref ?? '').trim().toUpperCase();
+
+  const [name, setName]         = useState('');
+  const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -21,12 +24,8 @@ export function CadastroScreenView() {
     try {
       setErrorMessage('');
       setIsSubmitting(true);
-      await signUp(email.trim(), password, name.trim());
-      Alert.alert(
-        'Confirme seu e-mail',
-        `Enviamos um link de confirmação para ${email.trim()}. Verifique sua caixa de entrada antes de entrar.`,
-        [{ text: 'OK', onPress: () => router.replace('/login') }],
-      );
+      await signUp(email.trim(), password, name.trim(), refCode || undefined);
+      router.replace('/(main)/home');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Não foi possível criar sua conta agora.';
       setErrorMessage(message);
@@ -42,10 +41,23 @@ export function CadastroScreenView() {
         <Card variant="low">
           <View style={styles.cardContent}>
             <Text style={styles.title}>Criar conta competitiva</Text>
-            <Text style={styles.subtitle}>Monte sua identidade na arena e deixe a base pronta para ranking, carteira e partidas ao vivo.</Text>
+            <Text style={styles.subtitle}>
+              Monte sua identidade na arena e deixe a base pronta para ranking, carteira e partidas ao vivo.
+            </Text>
             <Input label="Nome de jogador" value={name} onChangeText={setName} placeholder="Seu apelido" />
-            <Input label="Email" value={email} onChangeText={setEmail} placeholder="voce@dominio.com" />
+            <Input label="Email" value={email} onChangeText={setEmail} placeholder="voce@dominio.com" autoCapitalize="none" />
             <Input label="Senha" value={password} onChangeText={setPassword} placeholder="••••••••" secureTextEntry />
+            {refCode ? (
+              <View style={styles.refField}>
+                <Text style={styles.refLabel}>Código de indicação</Text>
+                <View style={styles.refBox}>
+                  <Text style={styles.refCode}>{refCode}</Text>
+                  <View style={styles.refLock}>
+                    <Text style={styles.refLockText}>Bloqueado</Text>
+                  </View>
+                </View>
+              </View>
+            ) : null}
             {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
             <Button
               title={isSubmitting ? 'Criando conta...' : 'Criar e entrar'}
@@ -87,5 +99,43 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily.bodyMedium,
     fontSize: 13,
     lineHeight: 20,
+  },
+
+  refField: { gap: 6 },
+  refLabel: {
+    color: theme.colors.textFaint,
+    fontFamily: theme.typography.fontFamily.bodyBold,
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  refBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceInset,
+    borderWidth: 1,
+    borderColor: theme.colors.outline,
+    borderRadius: theme.radius.md,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 10,
+    gap: theme.spacing.sm,
+  },
+  refCode: {
+    flex: 1,
+    color: theme.colors.primary,
+    fontFamily: theme.typography.fontFamily.bodyBold,
+    fontSize: 14,
+    letterSpacing: 1,
+  },
+  refLock: {
+    backgroundColor: theme.colors.surfaceHigh,
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  refLockText: {
+    color: theme.colors.textFaint,
+    fontFamily: theme.typography.fontFamily.bodyMedium,
+    fontSize: 10,
   },
 });

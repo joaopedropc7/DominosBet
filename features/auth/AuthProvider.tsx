@@ -42,17 +42,23 @@ export function AuthProvider({ children }: PropsWithChildren) {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       },
-      async signUp(email, password, displayName) {
-        const { error } = await supabase.auth.signUp({
+      async signUp(email, password, displayName, referralCode) {
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             data: {
               display_name: displayName,
+              referral_code: referralCode ?? null,
             },
           },
         });
         if (error) throw error;
+        // When email confirmation is disabled Supabase returns a session immediately.
+        // Take the chance to register the referral while we have an active session.
+        if (data.session && referralCode) {
+          await supabase.rpc('track_player_referral', { p_referral_code: referralCode });
+        }
       },
       async signOut() {
         const { error } = await supabase.auth.signOut();
