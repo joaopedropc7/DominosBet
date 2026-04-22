@@ -11,14 +11,30 @@ export function calcPrize(entryFee: number): number {
 export async function joinMatchmaking(
   mode: 'classic' | 'express',
   entryFee: number = ENTRY_FEE,
-): Promise<{ roomId: string; role: 'p1' | 'p2' }> {
+): Promise<{ roomId: string; role: 'p1' | 'p2'; reconnecting: boolean }> {
   const { data, error } = await supabase.rpc('join_matchmaking', {
     p_mode: mode,
     p_entry_fee: entryFee,
   });
   if (error) throw new Error(error.message);
-  const result = data as { room_id: string; role: 'p1' | 'p2' };
-  return { roomId: result.room_id, role: result.role };
+  const result = data as { room_id: string; role: 'p1' | 'p2'; reconnecting: boolean };
+  return { roomId: result.room_id, role: result.role, reconnecting: result.reconnecting ?? false };
+}
+
+/** Abandon the current stuck room and immediately join a fresh matchmaking queue. */
+export async function abandonAndRematch(
+  stuckRoomId: string,
+  mode: 'classic' | 'express',
+  entryFee: number = ENTRY_FEE,
+): Promise<{ roomId: string; role: 'p1' | 'p2'; reconnecting: boolean }> {
+  const { data, error } = await supabase.rpc('abandon_and_rematch', {
+    p_room_id: stuckRoomId,
+    p_mode: mode,
+    p_entry_fee: entryFee,
+  });
+  if (error) throw new Error(error.message);
+  const result = data as { room_id: string; role: 'p1' | 'p2'; reconnecting: boolean };
+  return { roomId: result.room_id, role: result.role, reconnecting: result.reconnecting ?? false };
 }
 
 /** Called by p2 after joining to push the initial shuffled game state. */

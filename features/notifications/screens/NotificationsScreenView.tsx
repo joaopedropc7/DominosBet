@@ -23,7 +23,8 @@ export function NotificationsScreenView() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading]             = useState(true);
   const [loadError, setLoadError]         = useState('');
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const channelRef  = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const instanceId  = useRef(`${Date.now()}-${Math.random().toString(36).slice(2)}`).current;
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -47,7 +48,7 @@ export function NotificationsScreenView() {
     if (!user?.id) return;
 
     const channel = supabase
-      .channel(`notifications:${user.id}`)
+      .channel(`notifications:${user.id}:${instanceId}`)
       .on(
         'postgres_changes',
         {

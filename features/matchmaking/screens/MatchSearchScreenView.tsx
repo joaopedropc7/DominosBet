@@ -7,13 +7,13 @@ import { Screen } from '@/components/base/Screen';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useUserData } from '@/hooks/useUserData';
-import { joinMatchmaking, leaveMatchmaking, calcPrize } from '@/services/online-match';
+import { joinMatchmaking, leaveMatchmaking, abandonAndRematch, calcPrize } from '@/services/online-match';
 import { formatCoins } from '@/utils/format';
 import { supabase } from '@/services/supabase';
 import { theme } from '@/theme';
 import type { MatchRoomRow } from '@/types/database';
 
-type SearchPhase = 'joining' | 'waiting' | 'found' | 'error';
+type SearchPhase = 'joining' | 'reconnecting' | 'waiting' | 'found' | 'error';
 
 interface MatchSearchScreenViewProps {
   mode: 'classic' | 'express';
@@ -26,54 +26,59 @@ export function MatchSearchScreenView({ mode, entryFee }: MatchSearchScreenViewP
   const [phase, setPhase] = useState<SearchPhase>('joining');
   const [errorMsg, setErrorMsg] = useState('');
   const roomIdRef = useRef<string | null>(null);
-  const roleRef = useRef<'p1' | 'p2'>('p1');
+  const roleRef   = useRef<'p1' | 'p2'>('p1');
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    let channel: ReturnType<typeof supabase.channel> | null = null;
 
-    async function startMatchmaking() {
+    async function startMatchmaking(skipRoomId?: string) {
       try {
-        const { roomId, role } = await joinMatchmaking(mode, entryFee);
-        if (!mounted) return;
-        roomIdRef.current = roomId;
-        roleRef.current = role;
+        const result = skipRoomId
+          ? await abandonAndRematch(skipRoomId, mode, entryFee)
+          : await joinMatchmaking(mode, entryFee);
 
-        // If we're p2, the room is already 'playing' — navigate immediately
-        if (role === 'p2') {
-          setPhase('found');
-          setTimeout(() => {
-            if (mounted) navigateToMatch(roomId, role);
-          }, 800);
+        if (!mounted) return;
+
+        const { roomId, role, reconnecting } = result;
+        roomIdRef.current = roomId;
+        roleRef.current   = role;
+
+        // Server detected an in-progress match → let user decide
+        if (reconnecting) {
+          setPhase('reconnecting');
           return;
         }
 
-        // p1: wait for p2 to join via Realtime
+        // p2 joins an already-playing room → go straight in
+        if (role === 'p2') {
+          setPhase('found');
+          setTimeout(() => { if (mounted) navigateToMatch(roomId, role); }, 800);
+          return;
+        }
+
+        // p1 waiting — subscribe to room updates
         setPhase('waiting');
 
-        channel = supabase
-          .channel(`matchmaking:${roomId}`)
+        const channel = supabase
+          .channel(`matchmaking:${roomId}:${Date.now()}`)
           .on(
             'postgres_changes',
-            {
-              event: 'UPDATE',
-              schema: 'public',
-              table: 'match_rooms',
-              filter: `id=eq.${roomId}`,
-            },
+            { event: 'UPDATE', schema: 'public', table: 'match_rooms', filter: `id=eq.${roomId}` },
             (payload) => {
               if (!mounted) return;
               const updated = payload.new as MatchRoomRow;
               if (updated.status === 'playing' && updated.player2_id) {
                 setPhase('found');
-                if (channel) supabase.removeChannel(channel);
-                setTimeout(() => {
-                  if (mounted) navigateToMatch(roomId, 'p1');
-                }, 800);
+                supabase.removeChannel(channel);
+                channelRef.current = null;
+                setTimeout(() => { if (mounted) navigateToMatch(roomId, 'p1'); }, 800);
               }
             },
           )
           .subscribe();
+
+        channelRef.current = channel;
       } catch (e) {
         if (!mounted) return;
         setErrorMsg(e instanceof Error ? e.message : 'Erro ao entrar na fila.');
@@ -85,9 +90,62 @@ export function MatchSearchScreenView({ mode, entryFee }: MatchSearchScreenViewP
 
     return () => {
       mounted = false;
-      if (channel) supabase.removeChannel(channel);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
   }, []);
+
+  async function handleReconnect() {
+    const roomId = roomIdRef.current;
+    const role   = roleRef.current;
+    if (!roomId) return;
+    navigateToMatch(roomId, role);
+  }
+
+  async function handleAbandonAndSearch() {
+    const stuckRoomId = roomIdRef.current;
+    if (!stuckRoomId) return;
+    setPhase('joining');
+    // Re-run matchmaking, this time passing the stuck room to abandon
+    try {
+      const result = await abandonAndRematch(stuckRoomId, mode, entryFee);
+      roomIdRef.current = result.roomId;
+      roleRef.current   = result.role;
+
+      if (result.reconnecting) {
+        setPhase('reconnecting');
+        return;
+      }
+      if (result.role === 'p2') {
+        setPhase('found');
+        setTimeout(() => navigateToMatch(result.roomId, 'p2'), 800);
+        return;
+      }
+      setPhase('waiting');
+      const channel = supabase
+        .channel(`matchmaking:${result.roomId}:${Date.now()}`)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'match_rooms', filter: `id=eq.${result.roomId}` },
+          (payload) => {
+            const updated = payload.new as MatchRoomRow;
+            if (updated.status === 'playing' && updated.player2_id) {
+              setPhase('found');
+              supabase.removeChannel(channel);
+              channelRef.current = null;
+              setTimeout(() => navigateToMatch(result.roomId, 'p1'), 800);
+            }
+          },
+        )
+        .subscribe();
+      channelRef.current = channel;
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Erro ao abandonar.');
+      setPhase('error');
+    }
+  }
 
   function navigateToMatch(roomId: string, role: 'p1' | 'p2') {
     router.replace({
@@ -97,18 +155,29 @@ export function MatchSearchScreenView({ mode, entryFee }: MatchSearchScreenViewP
   }
 
   async function handleCancel() {
-    if (roomIdRef.current && roleRef.current === 'p1') {
-      try {
-        await leaveMatchmaking(roomIdRef.current);
-      } catch {}
+    if (roomIdRef.current && roleRef.current === 'p1' && phase === 'waiting') {
+      try { await leaveMatchmaking(roomIdRef.current); } catch {}
     }
     router.back();
   }
+
+  const iconName =
+    phase === 'found'        ? 'check-bold' :
+    phase === 'error'        ? 'alert' :
+    phase === 'reconnecting' ? 'timer-sand' :
+    'domino-mask';
+
+  const iconColor =
+    phase === 'found'        ? theme.colors.primary :
+    phase === 'error'        ? theme.colors.danger :
+    phase === 'reconnecting' ? theme.colors.accent :
+    theme.colors.accent;
 
   return (
     <Screen
       withBottomNav
       stickyFooter={
+        phase === 'reconnecting' ? undefined :
         phase !== 'found'
           ? <Button title="Cancelar" variant="ghost" onPress={handleCancel} />
           : undefined
@@ -118,18 +187,12 @@ export function MatchSearchScreenView({ mode, entryFee }: MatchSearchScreenViewP
       <AppHeader compactBrand onRightPress={() => router.push('/(main)/configuracoes')} />
 
       <View style={styles.wrapper}>
-        {/* Radar animation */}
+        {/* Radar / icon */}
         <View style={[styles.radar, isCompact && styles.radarCompact]}>
           <View style={[styles.radarRing, isCompact && styles.radarRingCompact]} />
           <View style={[styles.radarInnerRing, isCompact && styles.radarInnerRingCompact]} />
           <View style={[styles.dominoCore, isCompact && styles.dominoCoreCompact]}>
-            {phase === 'found' ? (
-              <MaterialCommunityIcons name="check-bold" size={isCompact ? 44 : 54} color={theme.colors.primary} />
-            ) : phase === 'error' ? (
-              <MaterialCommunityIcons name="alert" size={isCompact ? 44 : 54} color={theme.colors.danger} />
-            ) : (
-              <MaterialCommunityIcons name="domino-mask" size={isCompact ? 44 : 54} color={theme.colors.accent} />
-            )}
+            <MaterialCommunityIcons name={iconName} size={isCompact ? 44 : 54} color={iconColor} />
           </View>
         </View>
 
@@ -138,6 +201,12 @@ export function MatchSearchScreenView({ mode, entryFee }: MatchSearchScreenViewP
             <>
               <ActivityIndicator color={theme.colors.primary} />
               <Text style={[styles.title, isCompact && styles.titleCompact]}>Entrando na fila…</Text>
+            </>
+          )}
+          {phase === 'reconnecting' && (
+            <>
+              <Text style={[styles.title, isCompact && styles.titleCompact]}>Partida em andamento</Text>
+              <Text style={styles.subtitle}>Você tem uma partida que não foi concluída</Text>
             </>
           )}
           {phase === 'waiting' && (
@@ -156,13 +225,19 @@ export function MatchSearchScreenView({ mode, entryFee }: MatchSearchScreenViewP
           )}
           {phase === 'error' && (
             <>
-              <Text style={[styles.title, styles.titleError, isCompact && styles.titleCompact]}>
-                Erro
-              </Text>
+              <Text style={[styles.title, styles.titleError, isCompact && styles.titleCompact]}>Erro</Text>
               <Text style={styles.errorText}>{errorMsg}</Text>
             </>
           )}
         </View>
+
+        {/* Reconnect action buttons */}
+        {phase === 'reconnecting' && (
+          <View style={styles.reconnectButtons}>
+            <Button title="Reconectar" onPress={handleReconnect} />
+            <Button title="Abandonar e nova partida" variant="ghost" onPress={handleAbandonAndSearch} />
+          </View>
+        )}
 
         {/* Player slots */}
         <View style={styles.players}>
@@ -245,6 +320,11 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0, 228, 241, 0.16)',
   },
   dominoCoreCompact: { width: 92, height: 126 },
+
+  reconnectButtons: {
+    width: '100%',
+    gap: theme.spacing.sm,
+  },
 
   copy: { alignItems: 'center', gap: theme.spacing.xs },
   title: {
