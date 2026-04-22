@@ -7,10 +7,22 @@ import { useAdminGuard } from '@/hooks/useAdminGuard';
 import { useUserData } from '@/hooks/useUserData';
 import { theme } from '@/theme';
 
-const NAV_ITEMS = [
-  { label: 'Dashboard',  icon: 'view-dashboard-outline', href: '/admin'          },
-  { label: 'Usuários',   icon: 'account-group-outline',  href: '/admin/usuarios' },
-  { label: 'Afiliados',  icon: 'link-variant',           href: '/admin/afiliados'},
+const NAV_SECTIONS = [
+  {
+    label: 'Geral',
+    items: [
+      { label: 'Dashboard', icon: 'view-dashboard-outline', href: '/admin'          },
+      { label: 'Usuários',  icon: 'account-group-outline',  href: '/admin/usuarios' },
+      { label: 'Links',     icon: 'link-variant',           href: '/admin/afiliados'},
+    ],
+  },
+  {
+    label: 'Programa de Afiliados',
+    items: [
+      { label: 'Cadastros',  icon: 'account-plus-outline',      href: '/admin/afiliados-cadastros' },
+      { label: 'Saques',     icon: 'bank-transfer-out',         href: '/admin/afiliados-saques'    },
+    ],
+  },
 ] as const;
 
 export function AdminShell({ children }: PropsWithChildren) {
@@ -45,34 +57,38 @@ export function AdminShell({ children }: PropsWithChildren) {
 
         {/* Nav */}
         <View style={styles.nav}>
-          <Text style={styles.navLabel}>Menu</Text>
-          {NAV_ITEMS.map((item) => {
-            const active =
-              item.href === '/admin'
-                ? pathname === '/admin' || pathname === '/admin/'
-                : pathname.startsWith(item.href);
-            return (
-              <Pressable
-                key={item.href}
-                onPress={() => router.push(item.href as any)}
-                style={({ pressed }) => [
-                  styles.navItem,
-                  active && styles.navItemActive,
-                  pressed && !active && styles.navItemPressed,
-                ]}
-              >
-                <MaterialCommunityIcons
-                  name={item.icon as any}
-                  size={18}
-                  color={active ? theme.colors.primary : theme.colors.textMuted}
-                />
-                <Text style={[styles.navItemText, active && styles.navItemTextActive]}>
-                  {item.label}
-                </Text>
-                {active && <View style={styles.activeIndicator} />}
-              </Pressable>
-            );
-          })}
+          {NAV_SECTIONS.map((section) => (
+            <View key={section.label} style={styles.navSection}>
+              <Text style={styles.navLabel}>{section.label}</Text>
+              {section.items.map((item) => {
+                const active =
+                  item.href === '/admin'
+                    ? pathname === '/admin' || pathname === '/admin/'
+                    : pathname.startsWith(item.href);
+                return (
+                  <Pressable
+                    key={item.href}
+                    onPress={() => router.push(item.href as any)}
+                    style={({ pressed }) => [
+                      styles.navItem,
+                      active && styles.navItemActive,
+                      pressed && !active && styles.navItemPressed,
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name={item.icon as any}
+                      size={18}
+                      color={active ? theme.colors.primary : theme.colors.textMuted}
+                    />
+                    <Text style={[styles.navItemText, active && styles.navItemTextActive]}>
+                      {item.label}
+                    </Text>
+                    {active && <View style={styles.activeIndicator} />}
+                  </Pressable>
+                );
+              })}
+            </View>
+          ))}
         </View>
 
         {/* Footer */}
@@ -164,6 +180,9 @@ const styles = StyleSheet.create({
   // ── Navigation ───────────────────────────────
   nav: {
     flex: 1,
+    gap: theme.spacing.md,
+  },
+  navSection: {
     gap: theme.spacing.xs,
   },
   navLabel: {
