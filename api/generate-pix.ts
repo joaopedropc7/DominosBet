@@ -1,4 +1,4 @@
-import { ExpoRequest, ExpoResponse } from 'expo-router/server';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
 const ORAMA_URL  = 'https://api.oramapay.com/api/v1/transactions';
@@ -7,12 +7,17 @@ const USER_AGENT = 'DominosBet/1.0 (+suporte@dominosbet.com.br)';
 const SUPABASE_URL      = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 
-export async function POST(request: ExpoRequest): Promise<ExpoResponse> {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Apenas POST
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed.' });
+  }
+
   try {
     // ── 1. Autenticar o usuário ───────────────────────────
-    const authHeader = request.headers.get('Authorization') ?? '';
+    const authHeader = req.headers.authorization ?? '';
     if (!authHeader.startsWith('Bearer ')) {
-      return ExpoResponse.json({ error: 'Não autenticado.' }, { status: 401 });
+      return res.status(401).json({ error: 'Não autenticado.' });
     }
 
     const userSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -21,13 +26,13 @@ export async function POST(request: ExpoRequest): Promise<ExpoResponse> {
 
     const { data: { user }, error: authErr } = await userSupabase.auth.getUser();
     if (authErr || !user) {
-      return ExpoResponse.json({ error: 'Não autenticado.' }, { status: 401 });
+      return res.status(401).json({ error: 'Não autenticado.' });
     }
 
     // ── 2. Ler body ───────────────────────────────────────
-    const { amount } = await request.json() as { amount: number };
+    const { amount } = req.body as { amount: number };
     if (!amount || amount <= 0) {
-      return ExpoResponse.json({ error: 'Valor inválido.' }, { status: 400 });
+      return res.status(400).json({ error: 'Valor inválido.' });
     }
 
     const amountCentavos = Math.round(amount * 100);
@@ -38,24 +43,24 @@ export async function POST(request: ExpoRequest): Promise<ExpoResponse> {
       { p_amount_reais: amount, p_amount_centavos: amountCentavos },
     );
     if (intentErr) {
-      return ExpoResponse.json({ error: intentErr.message }, { status: 400 });
+      return res.status(400).json({ error: intentErr.message });
     }
 
-    // ── 4. Buscar credenciais e perfil com o token do usuário ─
+    // ── 4. Buscar credenciais e perfil do banco ───────────
     const [gatewayRes, profileRes] = await Promise.all([
       userSupabase.rpc('get_payment_gateway'),
       userSupabase.from('profiles').select('display_name, cpf, phone').eq('id', user.id).single(),
     ]);
 
-    const gateway = gatewayRes.data as { api_key: string; public_key: string; is_live: boolean } | null;
+    const gateway = gatewayRes.data as { api_key: string; public_key: string } | null;
     const profile = profileRes.data;
 
     if (!gateway?.api_key || !gateway?.public_key) {
-      return ExpoResponse.json({ error: 'Gateway não configurado. Configure as chaves em Admin → Gateway.' }, { status: 400 });
+      return res.status(400).json({ error: 'Gateway não configurado. Configure as chaves em Admin → Gateway.' });
     }
 
     // ── 5. Chamar OramaPay ────────────────────────────────
-    const credentials = btoa(`${gateway.api_key}:${gateway.public_key}`);
+    const credentials = Buffer.from(`${gateway.api_key}:${gateway.public_key}`).toString('base64');
 
     const requestBody = {
       amount:        amountCentavos,
@@ -90,7 +95,7 @@ export async function POST(request: ExpoRequest): Promise<ExpoResponse> {
 
     const oramaData = await oramaRes.json();
     if (!oramaRes.ok) {
-      return ExpoResponse.json({ error: oramaData?.message ?? `OramaPay erro ${oramaRes.status}` }, { status: 400 });
+      return res.status(400).json({ error: oramaData?.message ?? `OramaPay erro ${oramaRes.status}` });
     }
 
     // ── 6. Salvar QR Code no banco ────────────────────────
@@ -103,7 +108,7 @@ export async function POST(request: ExpoRequest): Promise<ExpoResponse> {
     });
 
     // ── 7. Retornar ao client ─────────────────────────────
-    return ExpoResponse.json({
+    return res.status(200).json({
       depositId:     externalRef,
       transactionId: oramaData.id,
       status:        oramaData.status,
@@ -116,6 +121,6 @@ export async function POST(request: ExpoRequest): Promise<ExpoResponse> {
     });
 
   } catch (err: any) {
-    return ExpoResponse.json({ error: err?.message ?? 'Erro interno.' }, { status: 500 });
+    return res.status(500).json({ error: err?.message ?? 'Erro interno.' });
   }
 }
