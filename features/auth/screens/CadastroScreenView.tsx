@@ -16,15 +16,24 @@ export function CadastroScreenView() {
   const [name, setName]         = useState('');
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
+  const [phone, setPhone]       = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { signUp } = useAuth();
+
+  function maskPhone(raw: string) {
+    const d = raw.replace(/\D/g, '').slice(0, 11);
+    if (d.length <= 10) {
+      return d.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3').replace(/-$/, '');
+    }
+    return d.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3').replace(/-$/, '');
+  }
 
   async function handleSignUp() {
     try {
       setErrorMessage('');
       setIsSubmitting(true);
-      await signUp(email.trim(), password, name.trim(), refCode || undefined);
+      await signUp(email.trim(), password, name.trim(), refCode || undefined, phone.replace(/\D/g, '') || undefined);
       router.replace('/(main)/home');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Não foi possível criar sua conta agora.';
@@ -47,6 +56,7 @@ export function CadastroScreenView() {
             <Input label="Nome de jogador" value={name} onChangeText={setName} placeholder="Seu apelido" />
             <Input label="Email" value={email} onChangeText={setEmail} placeholder="voce@dominio.com" autoCapitalize="none" />
             <Input label="Senha" value={password} onChangeText={setPassword} placeholder="••••••••" secureTextEntry />
+            <Input label="Telefone" value={phone} onChangeText={(t) => setPhone(maskPhone(t))} placeholder="(11) 99999-9999" keyboardType="phone-pad" />
             {refCode ? (
               <View style={styles.refField}>
                 <Text style={styles.refLabel}>Código de indicação</Text>

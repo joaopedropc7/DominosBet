@@ -8,6 +8,8 @@ interface InputProps {
   onChangeText?: (value: string) => void;
   placeholder: string;
   secureTextEntry?: boolean;
+  keyboardType?: 'default' | 'email-address' | 'numeric' | 'phone-pad' | 'number-pad' | 'decimal-pad';
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   helperAction?: { label: string; onPress?: () => void };
   rightElement?: ReactNode;
 }
@@ -18,6 +20,8 @@ export function Input({
   onChangeText,
   placeholder,
   secureTextEntry,
+  keyboardType,
+  autoCapitalize,
   helperAction,
   rightElement,
 }: InputProps) {
@@ -39,6 +43,8 @@ export function Input({
           value={value}
           onChangeText={onChangeText}
           secureTextEntry={secureTextEntry}
+          keyboardType={keyboardType}
+          autoCapitalize={autoCapitalize}
         />
         {rightElement}
       </View>

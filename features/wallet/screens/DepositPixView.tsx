@@ -37,12 +37,23 @@ function isValidCpf(cpf: string) {
   return cpf.replace(/\D/g, '').length === 11;
 }
 
+function maskPhone(raw: string) {
+  const d = raw.replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 10) {
+    return d.replace(/(\d{2})(\d{4})(\d{0,4})/, '($1) $2-$3').replace(/-$/, '');
+  }
+  return d.replace(/(\d{2})(\d{5})(\d{0,4})/, '($1) $2-$3').replace(/-$/, '');
+}
+
 export function DepositPixView() {
   const { profile } = useUserData();
 
+  const hasPhone = !!(profile?.phone?.replace(/\D/g, ''));
+
   // ── form state ──────────────────────────────────────────
   const [amount, setAmount] = useState('');
-  const [cpf, setCpf] = useState('');
+  const [cpf, setCpf]       = useState('');
+  const [phone, setPhone]   = useState('');
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
 
@@ -86,16 +97,23 @@ export function DepositPixView() {
       return;
     }
 
+    if (!hasPhone && phone.replace(/\D/g, '').length < 10) {
+      setErr('Informe um telefone válido com DDD.');
+      return;
+    }
+
     setLoading(true);
     setErr('');
     try {
-      // Salva CPF no perfil se ainda não estava salvo
-      const rawCpf = cpf.replace(/\D/g, '');
-      if (profile?.cpf !== rawCpf) {
+      // Salva CPF (e telefone se necessário) no perfil
+      const rawCpf   = cpf.replace(/\D/g, '');
+      const rawPhone = hasPhone ? undefined : phone.replace(/\D/g, '');
+      if (profile?.cpf !== rawCpf || rawPhone) {
         const { error: docErr } = await supabase.rpc('update_profile_document', {
-          p_cpf: rawCpf,
+          p_cpf:   rawCpf,
+          p_phone: rawPhone ?? null,
         });
-        if (docErr) throw new Error('Erro ao salvar CPF: ' + docErr.message);
+        if (docErr) throw new Error('Erro ao salvar dados: ' + docErr.message);
       }
 
       const res = await generatePix(parsed);
@@ -211,12 +229,31 @@ export function DepositPixView() {
               </View>
             </Card>
 
+            {/* Campo de telefone — apenas se não estiver salvo */}
+            {!hasPhone && (
+              <Card variant="low">
+                <View style={styles.cpfField}>
+                  <Text style={styles.fieldLabel}>Telefone (com DDD)</Text>
+                  <TextInput
+                    style={styles.fieldInput}
+                    value={phone}
+                    onChangeText={(t) => { setPhone(maskPhone(t)); setErr(''); }}
+                    placeholder="(11) 99999-9999"
+                    placeholderTextColor={theme.colors.textFaint}
+                    keyboardType="phone-pad"
+                    returnKeyType="done"
+                    maxLength={15}
+                  />
+                </View>
+              </Card>
+            )}
+
             {err ? <Text style={styles.errorText}>{err}</Text> : null}
 
             <Button
               title={loading ? 'Gerando...' : 'Gerar QR Code PIX'}
               onPress={handleGenerate}
-              disabled={loading || !amount || !cpf}
+              disabled={loading || !amount || !cpf || (!hasPhone && !phone)}
               icon={
                 loading ? (
                   <ActivityIndicator size="small" color="#241A00" />

@@ -42,7 +42,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       },
-      async signUp(email, password, displayName, referralCode) {
+      async signUp(email, password, displayName, referralCode, phone) {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -50,6 +50,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
             data: {
               display_name: displayName,
               referral_code: referralCode ?? null,
+              phone: phone ?? null,
             },
           },
         });
