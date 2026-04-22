@@ -11,7 +11,6 @@ type GatewaySettings = {
   api_key: string;
   public_key: string;
   is_live: boolean;
-  postback_url: string;
   updated_at: string | null;
 };
 
@@ -61,11 +60,10 @@ export function AdminGatewayView() {
   const [error,    setError]    = useState('');
   const [success,  setSuccess]  = useState('');
 
-  const [apiKey,      setApiKey]      = useState('');
-  const [publicKey,   setPublicKey]   = useState('');
-  const [isLive,      setIsLive]      = useState(false);
-  const [postbackUrl, setPostbackUrl] = useState('');
-  const [updatedAt,   setUpdatedAt]   = useState<string | null>(null);
+  const [apiKey,    setApiKey]    = useState('');
+  const [publicKey, setPublicKey] = useState('');
+  const [isLive,    setIsLive]    = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
   useEffect(() => {
     supabase.rpc('admin_get_gateway_settings').then(({ data, error: rpcErr }) => {
@@ -75,7 +73,6 @@ export function AdminGatewayView() {
         setApiKey(s.api_key ?? '');
         setPublicKey(s.public_key ?? '');
         setIsLive(s.is_live ?? false);
-        setPostbackUrl(s.postback_url ?? '');
         setUpdatedAt(s.updated_at ?? null);
       }
       setLoading(false);
@@ -89,10 +86,9 @@ export function AdminGatewayView() {
     setSuccess('');
     setSaving(true);
     const { error: rpcErr } = await supabase.rpc('admin_update_gateway_settings', {
-      p_api_key:      apiKey.trim(),
-      p_public_key:   publicKey.trim(),
-      p_is_live:      isLive,
-      p_postback_url: postbackUrl.trim(),
+      p_api_key:    apiKey.trim(),
+      p_public_key: publicKey.trim(),
+      p_is_live:    isLive,
     });
     setSaving(false);
     if (rpcErr) {

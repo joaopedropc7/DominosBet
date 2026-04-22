@@ -91,7 +91,7 @@ serve(async (req) => {
           tangible:  false,
         }],
         externalRef,
-        postbackUrl: settings.postback_url || undefined,
+        postbackUrl: `${Deno.env.get('SUPABASE_URL')}/functions/v1/webhook-oramapay`,
       }),
     });
 
