@@ -6,9 +6,8 @@ export type GeneratePixResponse = {
   status:        string;
   amount:        number;
   pix: {
-    qrcode:      string;
-    qrcodeImage: string;
-    expiresAt:   string | null;
+    qrcode:    string;
+    expiresAt: string | null;
   };
 };
 

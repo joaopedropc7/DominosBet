@@ -82,6 +82,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         tangible:  false,
       }],
       externalRef,
+      postbackUrl: 'https://www.dominosbet.com.br/api/webhook-oramapay',
     };
 
     const oramaRes = await fetch(ORAMA_URL, {
@@ -103,9 +104,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await userSupabase.rpc('update_deposit_pix', {
       p_external_ref:     externalRef,
       p_orama_id:         oramaData.id,
-      p_pix_qrcode:       oramaData.pix?.qrcode      ?? '',
-      p_pix_qrcode_image: oramaData.pix?.qrcodeImage ?? '',
-      p_pix_expires_at:   oramaData.pix?.expiresAt   ?? null,
+      p_pix_qrcode:       oramaData.pix?.qrcode    ?? '',
+      p_pix_qrcode_image: '',
+      p_pix_expires_at:   oramaData.pix?.expiresAt ?? null,
     });
 
     // ── 7. Retornar ao client ─────────────────────────────
@@ -115,9 +116,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       status:        oramaData.status,
       amount:        oramaData.amount,
       pix: {
-        qrcode:      oramaData.pix?.qrcode      ?? '',
-        qrcodeImage: oramaData.pix?.qrcodeImage ?? '',
-        expiresAt:   oramaData.pix?.expiresAt   ?? null,
+        qrcode:    oramaData.pix?.qrcode    ?? '',
+        expiresAt: oramaData.pix?.expiresAt ?? null,
       },
     });
 

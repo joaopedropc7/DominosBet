@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Clipboard,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,6 +9,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Button } from '@/components/base/Button';
@@ -60,7 +60,6 @@ export function DepositPixView() {
   // ── QR state ────────────────────────────────────────────
   const [step, setStep] = useState<Step>('form');
   const [qrcode, setQrcode] = useState('');
-  const [qrcodeImage, setQrcodeImage] = useState('');
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -118,7 +117,6 @@ export function DepositPixView() {
 
       const res = await generatePix(parsed);
       setQrcode(res.pix?.qrcode ?? '');
-      setQrcodeImage(res.pix?.qrcodeImage ?? '');
       setExpiresAt(res.pix?.expiresAt ?? null);
       setStep('qr');
     } catch (e: any) {
@@ -138,7 +136,6 @@ export function DepositPixView() {
     setStep('form');
     setAmount('');
     setQrcode('');
-    setQrcodeImage('');
     setExpiresAt(null);
     setCopied(false);
     setErr('');
@@ -300,15 +297,18 @@ export function DepositPixView() {
               )}
             </View>
 
-            {/* QR Code image */}
+            {/* QR Code */}
             <Card variant="high">
               <View style={styles.qrContainer}>
-                {qrcodeImage ? (
-                  <Image
-                    source={{ uri: qrcodeImage }}
-                    style={styles.qrImage}
-                    resizeMode="contain"
-                  />
+                {qrcode ? (
+                  <View style={styles.qrWrapper}>
+                    <QRCode
+                      value={qrcode}
+                      size={210}
+                      backgroundColor="#FFFFFF"
+                      color="#000000"
+                    />
+                  </View>
                 ) : (
                   <View style={styles.qrPlaceholder}>
                     <MaterialCommunityIcons
@@ -515,9 +515,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: theme.spacing.md,
   },
-  qrImage: {
-    width: 220,
-    height: 220,
+  qrWrapper: {
+    padding: 12,
+    backgroundColor: '#FFFFFF',
     borderRadius: theme.radius.md,
   },
   qrPlaceholder: {
