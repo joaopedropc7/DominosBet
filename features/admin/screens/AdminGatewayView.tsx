@@ -190,24 +190,6 @@ export function AdminGatewayView() {
             />
           </View>
 
-          {/* Webhook */}
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <MaterialCommunityIcons name="webhook" size={16} color={theme.colors.textFaint} />
-              <Text style={styles.cardTitle}>Webhook (Postback URL)</Text>
-            </View>
-            <Text style={styles.cardDesc}>
-              URL que receberá as notificações de mudança de status dos pagamentos.
-            </Text>
-            <Field
-              label="Postback URL"
-              value={postbackUrl}
-              onChangeText={setPostbackUrl}
-              placeholder="https://dominosbet.com.br/api/webhooks/oramapay"
-              hint="Configure também no painel OramaPay em Configurações → Webhooks"
-            />
-          </View>
-
           {/* Auth preview */}
           <View style={styles.card}>
             <View style={styles.cardHeader}>
