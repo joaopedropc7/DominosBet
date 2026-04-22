@@ -4,8 +4,9 @@ import { createClient } from '@supabase/supabase-js';
 const ORAMA_URL  = 'https://api.oramapay.com/api/v1/transactions';
 const USER_AGENT = 'DominosBet/1.0 (+suporte@dominosbet.com.br)';
 
-const SUPABASE_URL      = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+// Valores públicos — seguros para expor (anon key tem RLS protegendo o banco)
+const SUPABASE_URL      = 'https://jqrehnvxoxsykchtxguv.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxcmVobnZ4b3hzeWtjaHR4Z3V2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMjgxMTcsImV4cCI6MjA5MDkwNDExN30.2I_6o3dmxqujRotZS8NtZwDLpkeGTXJyEFpKIq6hqO8';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Apenas POST
