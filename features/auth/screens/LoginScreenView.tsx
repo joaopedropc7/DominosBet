@@ -7,6 +7,7 @@ import { Input } from '@/components/base/Input';
 import { Screen } from '@/components/base/Screen';
 import { BrandMark } from '@/components/layout/BrandMark';
 import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/services/supabase';
 import { theme } from '@/theme';
 
 export function LoginScreenView() {
@@ -21,7 +22,8 @@ export function LoginScreenView() {
       setErrorMessage('');
       setIsSubmitting(true);
       await signIn(email.trim(), password);
-      router.replace('/(main)/home');
+      const { data: affiliateData } = await supabase.rpc('get_my_affiliate_profile');
+      router.replace(affiliateData ? '/afiliado' : '/(main)/home');
     } catch (error) {
       let message = error instanceof Error ? error.message : 'Não foi possível entrar agora.';
       if (message.toLowerCase().includes('email not confirmed')) {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   ActivityIndicator, FlatList, Modal, Pressable,
@@ -21,63 +21,75 @@ type AffiliateRow = {
   sub_affiliate_percent: number;
   balance: number;
   total_earned: number;
+  total_withdrawn: number;
+  referrals_count: number;
+  deposits_total: number;
   admin_notes: string | null;
   created_at: string;
 };
 
 const STATUS_CFG: Record<string, { label: string; color: string }> = {
-  pending:  { label: 'Pendente',  color: '#F59E0B' },
-  approved: { label: 'Aprovado',  color: '#10B981' },
-  rejected: { label: 'Recusado', color: '#EF4444' },
+  pending:  { label: 'Em análise', color: '#F59E0B' },
+  approved: { label: 'Aprovado',   color: '#10B981' },
+  rejected: { label: 'Recusado',   color: '#EF4444' },
 };
 
 const FILTER_TABS = [
-  { key: 'pending',  label: 'Pendentes' },
-  { key: 'approved', label: 'Aprovados' },
-  { key: 'rejected', label: 'Recusados' },
-  { key: '',         label: 'Todos'     },
+  { key: 'pending',  label: 'Em análise' },
+  { key: 'approved', label: 'Aprovados'  },
+  { key: 'rejected', label: 'Recusados'  },
+  { key: '',         label: 'Todos'      },
 ] as const;
+
+const fmt = (n: number | null | undefined) =>
+  `R$ ${(n ?? 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
 
 export function AdminAffiliateCadastrosView() {
   const [items,   setItems]   = useState<AffiliateRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter,  setFilter]  = useState<string>('pending');
+  const [search,  setSearch]  = useState('');
   const [error,   setError]   = useState('');
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [selected,    setSelected]    = useState<AffiliateRow | null>(null);
-  const [modalOpen,   setModalOpen]   = useState(false);
-  const [saving,      setSaving]      = useState(false);
+  const [selected,  setSelected]  = useState<AffiliateRow | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [saving,    setSaving]    = useState(false);
 
-  // Editable fields in the modal
-  const [ownCode,       setOwnCode]       = useState('');
-  const [revshare,      setRevshare]      = useState('');
-  const [cpa,           setCpa]           = useState('');
-  const [subPct,        setSubPct]        = useState('');
-  const [adminNotes,    setAdminNotes]    = useState('');
-  const [newStatus,     setNewStatus]     = useState<'approved' | 'rejected' | 'pending'>('pending');
+  // Modal editable fields
+  const [ownCode,    setOwnCode]    = useState('');
+  const [revshare,   setRevshare]   = useState('');
+  const [cpa,        setCpa]        = useState('');
+  const [subPct,     setSubPct]     = useState('');
+  const [adminNotes, setAdminNotes] = useState('');
+  const [newStatus,  setNewStatus]  = useState<'approved' | 'rejected' | 'pending'>('pending');
 
-  async function load() {
+  async function load(searchVal = search) {
     setLoading(true);
     setError('');
     const { data, error: rpcErr } = await supabase.rpc('admin_list_affiliates', {
       p_status: filter || null,
+      p_search: searchVal.trim() || null,
     });
-    if (rpcErr) {
-      setError(rpcErr.message);
-    } else {
-      setItems((data ?? []) as AffiliateRow[]);
-    }
+    if (rpcErr) setError(rpcErr.message);
+    else setItems((data ?? []) as AffiliateRow[]);
     setLoading(false);
   }
 
   useEffect(() => { load(); }, [filter]);
 
+  function handleSearchChange(val: string) {
+    setSearch(val);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => load(val), 400);
+  }
+
   function openModal(item: AffiliateRow) {
     setSelected(item);
     setOwnCode(item.own_code ?? '');
-    setRevshare(String(item.revshare_percent));
-    setCpa(item.cpa_amount.toFixed(2));
-    setSubPct(String(item.sub_affiliate_percent));
+    setRevshare(String(item.revshare_percent ?? 40));
+    setCpa((item.cpa_amount ?? 5).toFixed(2));
+    setSubPct(String(item.sub_affiliate_percent ?? 10));
     setAdminNotes(item.admin_notes ?? '');
     setNewStatus(item.status);
     setModalOpen(true);
@@ -87,69 +99,95 @@ export function AdminAffiliateCadastrosView() {
     if (!selected) return;
     setSaving(true);
     const { error: rpcErr } = await supabase.rpc('admin_update_affiliate', {
-      p_affiliate_id:        selected.id,
-      p_status:              newStatus,
-      p_own_code:            ownCode.trim().toUpperCase() || null,
-      p_notes:               adminNotes.trim() || null,
-      p_revshare_percent:    parseInt(revshare, 10) || 40,
-      p_cpa_amount:          parseFloat(cpa) || 5,
+      p_affiliate_id:          selected.id,
+      p_status:                newStatus,
+      p_own_code:              ownCode.trim().toUpperCase() || null,
+      p_notes:                 adminNotes.trim() || null,
+      p_revshare_percent:      parseInt(revshare, 10) || 40,
+      p_cpa_amount:            parseFloat(cpa) || 5,
       p_sub_affiliate_percent: parseInt(subPct, 10) || 10,
     });
     setSaving(false);
-    if (rpcErr) {
-      setError(rpcErr.message);
-    } else {
-      setModalOpen(false);
-      load();
-    }
+    if (rpcErr) setError(rpcErr.message);
+    else { setModalOpen(false); load(); }
   }
 
-  const fmt = (n: number) =>
-    `R$ ${n.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
+  const pendingCount = items.filter(i => i.status === 'pending').length;
 
   return (
     <View style={styles.root}>
-      {/* Header */}
+      {/* ── Header ────────────────────────────────────────── */}
       <View style={styles.pageHeader}>
         <View>
-          <Text style={styles.pageTitle}>Cadastros de Afiliados</Text>
-          <Text style={styles.pageSubtitle}>Aprovar, rejeitar e configurar comissões</Text>
+          <Text style={styles.pageTitle}>Afiliados</Text>
+          <Text style={styles.pageSubtitle}>Cadastros, comissões e desempenho</Text>
         </View>
-        <Pressable
-          onPress={load}
-          style={({ pressed }) => [styles.refreshBtn, pressed && { opacity: 0.7 }]}
-        >
-          <MaterialCommunityIcons name="refresh" size={18} color={theme.colors.textMuted} />
-        </Pressable>
-      </View>
-
-      {/* Filter tabs */}
-      <View style={styles.tabs}>
-        {FILTER_TABS.map(tab => (
+        <View style={styles.headerRight}>
+          {pendingCount > 0 && filter !== 'pending' && (
+            <Pressable
+              onPress={() => setFilter('pending')}
+              style={styles.alertBadge}
+            >
+              <MaterialCommunityIcons name="clock-alert-outline" size={14} color="#F59E0B" />
+              <Text style={styles.alertBadgeText}>{pendingCount} em análise</Text>
+            </Pressable>
+          )}
           <Pressable
-            key={tab.key}
-            onPress={() => setFilter(tab.key)}
-            style={[styles.tab, filter === tab.key && styles.tabActive]}
+            onPress={() => load()}
+            style={({ pressed }) => [styles.refreshBtn, pressed && { opacity: 0.7 }]}
           >
-            <Text style={[styles.tabText, filter === tab.key && styles.tabTextActive]}>
-              {tab.label}
-            </Text>
+            <MaterialCommunityIcons name="refresh" size={18} color={theme.colors.textMuted} />
           </Pressable>
-        ))}
+        </View>
       </View>
 
-      {/* Table header */}
+      {/* ── Search + Filter ───────────────────────────────── */}
+      <View style={styles.toolbar}>
+        <View style={styles.searchBox}>
+          <MaterialCommunityIcons name="magnify" size={18} color={theme.colors.textFaint} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar por nome ou e-mail…"
+            placeholderTextColor={theme.colors.textFaint}
+            value={search}
+            onChangeText={handleSearchChange}
+            autoCapitalize="none"
+          />
+          {search.length > 0 && (
+            <Pressable onPress={() => { setSearch(''); load(''); }}>
+              <MaterialCommunityIcons name="close-circle" size={16} color={theme.colors.textFaint} />
+            </Pressable>
+          )}
+        </View>
+
+        <View style={styles.tabs}>
+          {FILTER_TABS.map(tab => (
+            <Pressable
+              key={tab.key}
+              onPress={() => setFilter(tab.key)}
+              style={[styles.tab, filter === tab.key && styles.tabActive]}
+            >
+              <Text style={[styles.tabText, filter === tab.key && styles.tabTextActive]}>
+                {tab.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      {/* ── Table header ──────────────────────────────────── */}
       <View style={styles.tableHeader}>
-        <Text style={[styles.colAfil, styles.colHead]}>Afiliado</Text>
-        <Text style={[styles.col, styles.colHead]}>Código</Text>
-        <Text style={[styles.col, styles.colHead]}>Indicado por</Text>
-        <Text style={[styles.col, styles.colHead]}>RevShare</Text>
-        <Text style={[styles.col, styles.colHead]}>CPA</Text>
-        <Text style={[styles.col, styles.colHead]}>Cadastro</Text>
-        <Text style={[styles.col, styles.colHead]}>Status</Text>
+        <Text style={[styles.colAfil,    styles.colHead]}>Afiliado</Text>
+        <Text style={[styles.col,        styles.colHead]}>Código</Text>
+        <Text style={[styles.col,        styles.colHead]}>Cadastros</Text>
+        <Text style={[styles.col,        styles.colHead]}>Dep. trazidos</Text>
+        <Text style={[styles.col,        styles.colHead]}>Total ganho</Text>
+        <Text style={[styles.col,        styles.colHead]}>Saldo</Text>
+        <Text style={[styles.col,        styles.colHead]}>Status</Text>
         <View style={styles.colAction} />
       </View>
 
+      {/* ── List ──────────────────────────────────────────── */}
       {loading ? (
         <ActivityIndicator color={theme.colors.primary} style={{ marginTop: 60 }} />
       ) : error ? (
@@ -168,16 +206,17 @@ export function AdminAffiliateCadastrosView() {
               <View style={[styles.tableRow, index % 2 === 0 && styles.tableRowEven]}>
                 <View style={styles.colAfil}>
                   <Text style={styles.cellName}>{item.name}</Text>
-                  <Text style={styles.cellEmail}>{item.email}</Text>
-                  <Text style={styles.cellEmail}>{item.phone}</Text>
+                  <Text style={styles.cellSub}>{item.email}</Text>
+                  <Text style={styles.cellSub}>{item.phone}</Text>
                 </View>
                 <Text style={[styles.col, styles.cellMono]}>{item.own_code ?? '—'}</Text>
-                <Text style={[styles.col, styles.cellText]}>{item.referral_code ?? '—'}</Text>
-                <Text style={[styles.col, styles.cellText]}>{item.revshare_percent}%</Text>
-                <Text style={[styles.col, styles.cellText]}>{fmt(item.cpa_amount)}</Text>
-                <Text style={[styles.col, styles.cellDate]}>
-                  {new Date(item.created_at).toLocaleDateString('pt-BR')}
-                </Text>
+                <View style={styles.col}>
+                  <Text style={styles.cellNumber}>{item.referrals_count ?? 0}</Text>
+                  <Text style={styles.cellSub}>jogadores</Text>
+                </View>
+                <Text style={[styles.col, styles.cellMoney]}>{fmt(item.deposits_total)}</Text>
+                <Text style={[styles.col, styles.cellMoney]}>{fmt(item.total_earned)}</Text>
+                <Text style={[styles.col, styles.cellBalance]}>{fmt(item.balance)}</Text>
                 <View style={styles.col}>
                   <View style={[styles.badge, { backgroundColor: s.color + '22' }]}>
                     <Text style={[styles.badgeText, { color: s.color }]}>{s.label}</Text>
@@ -197,20 +236,49 @@ export function AdminAffiliateCadastrosView() {
           ListEmptyComponent={
             <View style={styles.empty}>
               <MaterialCommunityIcons name="account-off-outline" size={36} color={theme.colors.textFaint} />
-              <Text style={styles.emptyText}>Nenhum cadastro encontrado.</Text>
+              <Text style={styles.emptyText}>
+                {search ? 'Nenhum afiliado encontrado para esta busca.' : 'Nenhum afiliado nesta categoria.'}
+              </Text>
             </View>
           }
         />
       )}
 
-      {/* Edit modal */}
+      {/* ── Edit modal ────────────────────────────────────── */}
       <Modal visible={modalOpen} transparent animationType="fade" onRequestClose={() => setModalOpen(false)}>
         <Pressable style={styles.overlay} onPress={() => setModalOpen(false)}>
           <Pressable style={styles.modal} onPress={() => {}}>
             <Text style={styles.modalTitle}>{selected?.name}</Text>
             <Text style={styles.modalSub}>{selected?.email} · CPF: {selected?.cpf}</Text>
 
-            {/* Status selector */}
+            {/* Metrics summary */}
+            {selected && (
+              <View style={styles.metricsRow}>
+                <View style={styles.metricItem}>
+                  <Text style={styles.metricValue}>{selected.referrals_count ?? 0}</Text>
+                  <Text style={styles.metricLabel}>Cadastros</Text>
+                </View>
+                <View style={styles.metricDivider} />
+                <View style={styles.metricItem}>
+                  <Text style={styles.metricValue}>{fmt(selected.deposits_total)}</Text>
+                  <Text style={styles.metricLabel}>Dep. trazidos</Text>
+                </View>
+                <View style={styles.metricDivider} />
+                <View style={styles.metricItem}>
+                  <Text style={styles.metricValue}>{fmt(selected.total_earned)}</Text>
+                  <Text style={styles.metricLabel}>Total ganho</Text>
+                </View>
+                <View style={styles.metricDivider} />
+                <View style={styles.metricItem}>
+                  <Text style={[styles.metricValue, { color: theme.colors.primary }]}>
+                    {fmt(selected.balance)}
+                  </Text>
+                  <Text style={styles.metricLabel}>Saldo</Text>
+                </View>
+              </View>
+            )}
+
+            {/* Status */}
             <Text style={styles.fieldLabel}>Status</Text>
             <View style={styles.statusRow}>
               {(['approved', 'pending', 'rejected'] as const).map(s => (
@@ -230,6 +298,7 @@ export function AdminAffiliateCadastrosView() {
               ))}
             </View>
 
+            {/* Commission fields */}
             <View style={styles.formRow}>
               <View style={styles.formField}>
                 <Text style={styles.fieldLabel}>Código próprio</Text>
@@ -328,47 +397,65 @@ const styles = StyleSheet.create({
   },
   pageTitle: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.display, fontSize: 26 },
   pageSubtitle: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 13, marginTop: 2 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
+  alertBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: '#F59E0B22', borderRadius: theme.radius.pill,
+    paddingHorizontal: theme.spacing.sm, paddingVertical: 6,
+    borderWidth: 1, borderColor: '#F59E0B44',
+  },
+  alertBadgeText: { color: '#F59E0B', fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 12 },
   refreshBtn: {
     width: 36, height: 36, borderRadius: theme.radius.md,
     backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.outline,
     alignItems: 'center', justifyContent: 'center',
   },
 
-  tabs: {
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
+  toolbar: {
+    gap: theme.spacing.sm,
     paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.outline,
   },
-  tab: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 7,
-    borderRadius: theme.radius.pill,
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.surface,
     borderWidth: 1,
     borderColor: theme.colors.outline,
+    borderRadius: theme.radius.md,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 9,
+  },
+  searchInput: {
+    flex: 1,
+    color: theme.colors.text,
+    fontFamily: theme.typography.fontFamily.bodyMedium,
+    fontSize: 14,
+    outlineStyle: 'none',
+  } as any,
+
+  tabs: { flexDirection: 'row', gap: theme.spacing.xs },
+  tab: {
+    paddingHorizontal: theme.spacing.md, paddingVertical: 7,
+    borderRadius: theme.radius.pill, borderWidth: 1, borderColor: theme.colors.outline,
   },
   tabActive: { backgroundColor: theme.colors.primarySoft, borderColor: theme.colors.primary },
   tabText: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 13 },
   tabTextActive: { color: theme.colors.primary, fontFamily: theme.typography.fontFamily.bodyBold },
 
   tableHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.xl,
-    paddingVertical: theme.spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.outline,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: theme.spacing.xl, paddingVertical: theme.spacing.sm,
+    borderBottomWidth: 1, borderBottomColor: theme.colors.outline,
     backgroundColor: theme.colors.surface,
   },
   tableRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.xl,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.outline,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: theme.spacing.xl, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: theme.colors.outline,
   },
   tableRowEven: { backgroundColor: 'rgba(255,255,255,0.015)' },
 
@@ -378,10 +465,11 @@ const styles = StyleSheet.create({
   colHead: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8 },
 
   cellName: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 13 },
-  cellEmail: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.body, fontSize: 11 },
+  cellSub: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.body, fontSize: 11 },
   cellMono: { color: theme.colors.primary, fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 12 },
-  cellText: { color: theme.colors.textSoft, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 13 },
-  cellDate: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.body, fontSize: 12 },
+  cellNumber: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.display, fontSize: 18 },
+  cellMoney: { color: theme.colors.textSoft, fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 12 },
+  cellBalance: { color: theme.colors.primary, fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 12 },
 
   badge: { alignSelf: 'flex-start', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   badgeText: { fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 11 },
@@ -402,10 +490,9 @@ const styles = StyleSheet.create({
   },
   errorText: { color: theme.colors.danger, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 14, flex: 1 },
 
-  // Modal
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
   modal: {
-    width: 520,
+    width: 540,
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radius.xl,
     borderWidth: 1,
@@ -416,11 +503,22 @@ const styles = StyleSheet.create({
   modalTitle: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.display, fontSize: 20 },
   modalSub: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 12, marginBottom: 4 },
 
-  statusRow: { flexDirection: 'row', gap: theme.spacing.sm, marginBottom: theme.spacing.xs },
-  statusBtn: {
-    flex: 1, borderWidth: 1, borderRadius: theme.radius.md,
-    paddingVertical: 8, alignItems: 'center',
+  metricsRow: {
+    flexDirection: 'row',
+    backgroundColor: theme.colors.surfaceInset,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.outline,
+    marginBottom: theme.spacing.xs,
+    overflow: 'hidden',
   },
+  metricItem: { flex: 1, alignItems: 'center', paddingVertical: 12, gap: 2 },
+  metricDivider: { width: 1, backgroundColor: theme.colors.outline },
+  metricValue: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.display, fontSize: 15 },
+  metricLabel: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 10 },
+
+  statusRow: { flexDirection: 'row', gap: theme.spacing.sm, marginBottom: theme.spacing.xs },
+  statusBtn: { flex: 1, borderWidth: 1, borderRadius: theme.radius.md, paddingVertical: 8, alignItems: 'center' },
   statusBtnText: { fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 13 },
 
   formRow: { flexDirection: 'row', gap: theme.spacing.sm },

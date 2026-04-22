@@ -19,8 +19,8 @@ const NAV_SECTIONS = [
   {
     label: 'Programa de Afiliados',
     items: [
-      { label: 'Cadastros',  icon: 'account-plus-outline',      href: '/admin/afiliados-cadastros' },
-      { label: 'Saques',     icon: 'bank-transfer-out',         href: '/admin/afiliados-saques'    },
+      { label: 'Afiliados',  icon: 'account-plus-outline',      href: '/admin/afiliados-cadastros' },
+      { label: 'Saques',    icon: 'bank-transfer-out',         href: '/admin/afiliados-saques'    },
     ],
   },
 ] as const;
