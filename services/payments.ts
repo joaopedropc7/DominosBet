@@ -51,6 +51,30 @@ export async function generatePix(amount: number): Promise<GeneratePixResponse> 
   // ── 4. Chamar OramaPay diretamente ────────────────────
   const credentials = btoa(`${gateway.api_key}:${gateway.public_key}`);
 
+  const requestBody = {
+    amount:        amountCentavos,
+    paymentMethod: 'pix',
+    customer: {
+      name:     profile?.display_name || session.user.email,
+      email:    session.user.email,
+      phone:    (profile?.phone || '').replace(/\D/g, ''),
+      document: {
+        number: (profile?.cpf || '').replace(/\D/g, ''),
+        type:   'cpf',
+      },
+    },
+    items: [{
+      title:     'Depósito',
+      unitPrice: amountCentavos,
+      quantity:  1,
+      tangible:  false,
+    }],
+    externalRef,
+  };
+
+  console.log('[OramaPay] POST', ORAMA_URL);
+  console.log('[OramaPay] body:', JSON.stringify(requestBody, null, 2));
+
   const oramaRes = await fetch(ORAMA_URL, {
     method: 'POST',
     headers: {
@@ -58,29 +82,13 @@ export async function generatePix(amount: number): Promise<GeneratePixResponse> 
       'Content-Type':  'application/json',
       'Authorization': `Basic ${credentials}`,
     },
-    body: JSON.stringify({
-      amount:        amountCentavos,
-      paymentMethod: 'pix',
-      customer: {
-        name:     profile?.display_name || session.user.email,
-        email:    session.user.email,
-        phone:    (profile?.phone || '').replace(/\D/g, ''),
-        document: {
-          number: (profile?.cpf || '').replace(/\D/g, ''),
-          type:   'cpf',
-        },
-      },
-      items: [{
-        title:     'Depósito',
-        unitPrice: amountCentavos,
-        quantity:  1,
-        tangible:  false,
-      }],
-      externalRef,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   const oramaData = await oramaRes.json();
+  console.log('[OramaPay] status:', oramaRes.status);
+  console.log('[OramaPay] response:', JSON.stringify(oramaData, null, 2));
+
   if (!oramaRes.ok) {
     throw new Error(oramaData?.message ?? `OramaPay erro ${oramaRes.status}`);
   }
