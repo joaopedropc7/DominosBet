@@ -6,7 +6,6 @@ const USER_AGENT = 'DominosBet/1.0 (+suporte@dominosbet.com.br)';
 
 const SUPABASE_URL      = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
-const SERVICE_ROLE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export async function POST(request: ExpoRequest): Promise<ExpoResponse> {
   try {
@@ -42,15 +41,13 @@ export async function POST(request: ExpoRequest): Promise<ExpoResponse> {
       return ExpoResponse.json({ error: intentErr.message }, { status: 400 });
     }
 
-    // ── 4. Buscar credenciais e perfil via service role ───
-    const serviceSupabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-
+    // ── 4. Buscar credenciais e perfil com o token do usuário ─
     const [gatewayRes, profileRes] = await Promise.all([
-      serviceSupabase.from('gateway_settings').select('api_key, public_key, is_live').eq('provider', 'oramapay').single(),
-      serviceSupabase.from('profiles').select('display_name, cpf, phone').eq('id', user.id).single(),
+      userSupabase.rpc('get_payment_gateway'),
+      userSupabase.from('profiles').select('display_name, cpf, phone').eq('id', user.id).single(),
     ]);
 
-    const gateway = gatewayRes.data;
+    const gateway = gatewayRes.data as { api_key: string; public_key: string; is_live: boolean } | null;
     const profile = profileRes.data;
 
     if (!gateway?.api_key || !gateway?.public_key) {
