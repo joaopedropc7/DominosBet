@@ -89,7 +89,13 @@ export async function generatePix(amount: number): Promise<GeneratePixResponse> 
     body: { amount },
   });
 
-  if (res.error) throw new Error(res.error.message);
+  if (res.error) {
+    const msg = res.error.message ?? '';
+    if (msg.toLowerCase().includes('failed to send') || msg.toLowerCase().includes('fetch')) {
+      throw new Error('Serviço de pagamento indisponível. Tente novamente em instantes.');
+    }
+    throw new Error(msg || 'Erro ao conectar ao serviço de pagamento.');
+  }
   if (res.data?.error) throw new Error(res.data.error);
 
   return res.data as GeneratePixResponse;

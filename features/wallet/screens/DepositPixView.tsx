@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Clipboard,
   Image,
   Pressable,
   ScrollView,
@@ -9,13 +10,14 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Clipboard } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Button } from '@/components/base/Button';
 import { Card } from '@/components/base/Card';
 import { Screen } from '@/components/base/Screen';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { useUserData } from '@/hooks/useUserData';
+import { supabase } from '@/services/supabase';
 import { generatePix } from '@/services/payments';
 import { theme } from '@/theme';
 
@@ -23,9 +25,24 @@ type Step = 'form' | 'qr';
 
 const QUICK_AMOUNTS = [10, 20, 50, 100, 200, 500];
 
+function maskCpf(raw: string) {
+  const d = raw.replace(/\D/g, '').slice(0, 11);
+  return d
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/(\d{3})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3-$4');
+}
+
+function isValidCpf(cpf: string) {
+  return cpf.replace(/\D/g, '').length === 11;
+}
+
 export function DepositPixView() {
+  const { profile } = useUserData();
+
   // ── form state ──────────────────────────────────────────
   const [amount, setAmount] = useState('');
+  const [cpf, setCpf] = useState('');
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
 
@@ -36,11 +53,20 @@ export function DepositPixView() {
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Pré-preenche CPF do perfil
+  useEffect(() => {
+    if (profile?.cpf) setCpf(maskCpf(profile.cpf));
+  }, [profile?.cpf]);
+
   // ── handlers ────────────────────────────────────────────
   function handleAmountChange(text: string) {
-    // Apenas dígitos e um ponto
     const clean = text.replace(/[^0-9.]/g, '');
     setAmount(clean);
+    setErr('');
+  }
+
+  function handleCpfChange(text: string) {
+    setCpf(maskCpf(text));
     setErr('');
   }
 
@@ -55,10 +81,23 @@ export function DepositPixView() {
       setErr('Valor mínimo: R$ 1,00');
       return;
     }
+    if (!isValidCpf(cpf)) {
+      setErr('Informe um CPF válido (11 dígitos).');
+      return;
+    }
 
     setLoading(true);
     setErr('');
     try {
+      // Salva CPF no perfil se ainda não estava salvo
+      const rawCpf = cpf.replace(/\D/g, '');
+      if (profile?.cpf !== rawCpf) {
+        const { error: docErr } = await supabase.rpc('update_profile_document', {
+          p_cpf: rawCpf,
+        });
+        if (docErr) throw new Error('Erro ao salvar CPF: ' + docErr.message);
+      }
+
       const res = await generatePix(parsed);
       setQrcode(res.pix?.qrcode ?? '');
       setQrcodeImage(res.pix?.qrcodeImage ?? '');
@@ -87,11 +126,12 @@ export function DepositPixView() {
     setErr('');
   }
 
-  // ── expiration label ────────────────────────────────────
   function expiresLabel() {
     if (!expiresAt) return null;
-    const d = new Date(expiresAt);
-    return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return new Date(expiresAt).toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   }
 
   // ── render ──────────────────────────────────────────────
@@ -107,12 +147,11 @@ export function DepositPixView() {
         showsVerticalScrollIndicator={false}
       >
         {step === 'form' ? (
-          /* ══════════ ETAPA 1 — Formulário ══════════ */
           <>
             <View style={styles.heading}>
               <Text style={styles.title}>Depositar via PIX</Text>
               <Text style={styles.subtitle}>
-                Escolha ou digite o valor e receba o QR Code na hora.
+                Escolha ou digite o valor e receba o QR Code instantaneamente.
               </Text>
             </View>
 
@@ -155,12 +194,29 @@ export function DepositPixView() {
               </View>
             </Card>
 
+            {/* Campo de CPF */}
+            <Card variant="low">
+              <View style={styles.cpfField}>
+                <Text style={styles.fieldLabel}>CPF do titular</Text>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={cpf}
+                  onChangeText={handleCpfChange}
+                  placeholder="000.000.000-00"
+                  placeholderTextColor={theme.colors.textFaint}
+                  keyboardType="number-pad"
+                  returnKeyType="done"
+                  maxLength={14}
+                />
+              </View>
+            </Card>
+
             {err ? <Text style={styles.errorText}>{err}</Text> : null}
 
             <Button
               title={loading ? 'Gerando...' : 'Gerar QR Code PIX'}
               onPress={handleGenerate}
-              disabled={loading || !amount}
+              disabled={loading || !amount || !cpf}
               icon={
                 loading ? (
                   <ActivityIndicator size="small" color="#241A00" />
@@ -228,7 +284,7 @@ export function DepositPixView() {
               </View>
             </Card>
 
-            {/* Instruções */}
+            {/* Passos */}
             <View style={styles.steps}>
               {[
                 'Abra o app do seu banco',
@@ -262,7 +318,11 @@ export function DepositPixView() {
                   <MaterialCommunityIcons
                     name={copied ? 'check' : 'content-copy'}
                     size={16}
-                    color={copied ? theme.colors.background : theme.colors.primary}
+                    color={
+                      copied
+                        ? theme.colors.background
+                        : theme.colors.primary
+                    }
                   />
                   <Text
                     style={[
@@ -300,7 +360,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.lg,
     paddingBottom: theme.spacing.xl,
   },
-
   heading: {
     gap: theme.spacing.xs,
   },
@@ -316,7 +375,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 
-  // ── Valores rápidos ──────────────────────────────────────
+  // ── Chips ──────────────────────────────────────────────
   quickRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -344,7 +403,7 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily.bodySemiBold,
   },
 
-  // ── Campo de valor ───────────────────────────────────────
+  // ── Valor ──────────────────────────────────────────────
   amountField: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -363,14 +422,32 @@ const styles = StyleSheet.create({
     padding: 0,
   },
 
+  // ── CPF ────────────────────────────────────────────────
+  cpfField: {
+    gap: theme.spacing.xs,
+  },
+  fieldLabel: {
+    color: theme.colors.textFaint,
+    fontFamily: theme.typography.fontFamily.bodyBold,
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 1.4,
+  },
+  fieldInput: {
+    color: theme.colors.text,
+    fontFamily: theme.typography.fontFamily.bodyMedium,
+    fontSize: 18,
+    padding: 0,
+  },
+
   errorText: {
-    color: theme.colors.error ?? '#FF5A5A',
+    color: '#FF5A5A',
     fontFamily: theme.typography.fontFamily.bodyMedium,
     fontSize: 13,
     textAlign: 'center',
   },
 
-  // ── Info box ─────────────────────────────────────────────
+  // ── Info ───────────────────────────────────────────────
   infoBox: {
     flexDirection: 'row',
     gap: theme.spacing.sm,
@@ -384,7 +461,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  // ── Expiration ───────────────────────────────────────────
+  // ── Expiração ──────────────────────────────────────────
   expiresRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -396,7 +473,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
-  // ── QR Code ──────────────────────────────────────────────
+  // ── QR ─────────────────────────────────────────────────
   qrContainer: {
     alignItems: 'center',
     paddingVertical: theme.spacing.md,
@@ -415,7 +492,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceInset,
   },
 
-  // ── Passos ───────────────────────────────────────────────
+  // ── Passos ─────────────────────────────────────────────
   steps: {
     gap: theme.spacing.sm,
   },
@@ -444,7 +521,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  // ── Copia-e-cola ─────────────────────────────────────────
+  // ── Copia-e-cola ───────────────────────────────────────
   copyBox: {
     gap: theme.spacing.sm,
   },

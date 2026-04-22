@@ -11,17 +11,18 @@ const NAV_SECTIONS = [
   {
     label: 'Geral',
     items: [
-      { label: 'Dashboard', icon: 'view-dashboard-outline', href: '/admin'          },
-      { label: 'Usuários',  icon: 'account-group-outline',  href: '/admin/usuarios' },
-      { label: 'Links',     icon: 'link-variant',           href: '/admin/afiliados'},
-      { label: 'Gateway',   icon: 'credit-card-outline',    href: '/admin/gateway'  },
+      { label: 'Dashboard',   icon: 'view-dashboard-outline', href: '/admin'               },
+      { label: 'Usuários',    icon: 'account-group-outline',  href: '/admin/usuarios'      },
+      { label: 'Transações',  icon: 'swap-horizontal',        href: '/admin/transacoes'    },
+      { label: 'Gateway',     icon: 'credit-card-outline',    href: '/admin/gateway'       },
+      { label: 'Links',       icon: 'link-variant',           href: '/admin/afiliados'     },
     ],
   },
   {
     label: 'Programa de Afiliados',
     items: [
-      { label: 'Afiliados',  icon: 'account-plus-outline',      href: '/admin/afiliados-cadastros' },
-      { label: 'Saques',    icon: 'bank-transfer-out',         href: '/admin/afiliados-saques'    },
+      { label: 'Afiliados', icon: 'account-plus-outline', href: '/admin/afiliados-cadastros' },
+      { label: 'Saques',    icon: 'bank-transfer-out',    href: '/admin/afiliados-saques'    },
     ],
   },
 ] as const;

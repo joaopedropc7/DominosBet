@@ -18,6 +18,8 @@ export interface Database {
           streak_label: string;
           is_admin: boolean;
           is_banned: boolean;
+          cpf: string | null;
+          phone: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -37,6 +39,8 @@ export interface Database {
           streak_label?: string;
           is_admin?: boolean;
           is_banned?: boolean;
+          cpf?: string | null;
+          phone?: string | null;
           created_at?: string;
           updated_at?: string;
         };

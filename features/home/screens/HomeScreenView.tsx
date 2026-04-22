@@ -35,6 +35,7 @@ export function HomeScreenView() {
             variant="ghost"
             fullWidth={false}
             icon={<MaterialCommunityIcons name="plus-circle-outline" size={18} color={theme.colors.accent} />}
+            onPress={() => router.push('/(main)/depositar')}
           />
         </View>
       </Card>
