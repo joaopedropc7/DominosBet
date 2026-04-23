@@ -10,6 +10,7 @@ type Metrics = {
   total_withdrawn: number;
   registros: number;
   ftds: number;
+  deposit_total_sum: number;
   revshare_percent: number;
   cpa_amount: number;
   sub_affiliate_percent: number;
@@ -176,22 +177,22 @@ export function AffiliateDashboardView() {
           <View style={styles.cardsRow}>
             <MetricCard
               title="Comissão Ganha"
-              value={fmt(metrics.total_earned)}
+              value={fmt(Number(metrics.total_earned))}
               sub="Comissão Ganha"
               icon="currency-usd"
               color={theme.colors.primary}
             />
             <MetricCard
               title="Saques Realizados"
-              value={fmt(metrics.total_withdrawn)}
+              value={fmt(Number(metrics.total_withdrawn))}
               sub={`${metrics.ftds > 0 ? metrics.ftds : 0} Saques Realizados`}
               icon="bank-transfer-out"
               color="#60A5FA"
             />
             <MetricCard
               title="Depósitos Tragos"
-              value={fmt(0)}
-              sub={`${metrics.ftds} Depósitos Tragos`}
+              value={fmt(Number(metrics.deposit_total_sum))}
+              sub={`${metrics.ftds} indicado(s) depositaram`}
               icon="cash-plus"
               color="#34D399"
             />

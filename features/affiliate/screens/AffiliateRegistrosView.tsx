@@ -71,7 +71,7 @@ export function AffiliateRegistrosView() {
                 </View>
                 <Text style={[styles.col, styles.cellAmount]}>
                   {item.has_deposited
-                    ? `R$ ${item.deposit_total.toFixed(2).replace('.', ',')}`
+                    ? `R$ ${Number(item.deposit_total).toFixed(2).replace('.', ',')}`
                     : '—'}
                 </Text>
                 <View style={styles.col}>
