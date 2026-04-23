@@ -144,29 +144,48 @@ export function DepositPixView() {
     setTimeout(() => setCopied(false), 2500);
   }
 
-  // ── Realtime: escuta confirmação de pagamento ───────────
+  // ── Realtime + polling: escuta confirmação de pagamento ──
   useEffect(() => {
     if (step !== 'qr' || !depositId) return;
 
+    let cancelled = false;
+
+    // Polling: consulta direta a cada 4 s (fallback confiável)
+    const poll = async () => {
+      if (cancelled) return;
+      const { data } = await supabase
+        .from('deposits')
+        .select('status')
+        .eq('external_ref', depositId)
+        .single();
+      if (data?.status === 'paid') {
+        setPaid(true);
+      }
+    };
+    const interval = setInterval(poll, 4000);
+
+    // Realtime: sem filtro server-side (filtra client-side)
     const channel = supabase
       .channel(`deposit-${depositId}`)
       .on(
         'postgres_changes',
-        {
-          event:  'UPDATE',
-          schema: 'public',
-          table:  'deposits',
-          filter: `external_ref=eq.${depositId}`,
-        },
+        { event: 'UPDATE', schema: 'public', table: 'deposits' },
         (payload) => {
-          if (payload.new?.status === 'paid') {
+          if (
+            payload.new?.external_ref === depositId &&
+            payload.new?.status === 'paid'
+          ) {
             setPaid(true);
           }
         },
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
   }, [step, depositId]);
 
   function handleNewDeposit() {
