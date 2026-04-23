@@ -50,6 +50,15 @@ export function DepositPixView() {
 
   const hasPhone = !!(profile?.phone?.replace(/\D/g, ''));
 
+  // ── configurações do jogador (vindas do banco) ──────────
+  const [minDeposit, setMinDeposit] = useState(1);
+
+  useEffect(() => {
+    supabase.rpc('get_player_settings').then(({ data }) => {
+      if (data?.player_min_deposit) setMinDeposit(Number(data.player_min_deposit));
+    });
+  }, []);
+
   // ── form state ──────────────────────────────────────────
   const [amount, setAmount] = useState('');
   const [cpf, setCpf]       = useState('');
@@ -89,8 +98,8 @@ export function DepositPixView() {
 
   async function handleGenerate() {
     const parsed = parseFloat(amount);
-    if (!parsed || parsed < 1) {
-      setErr('Valor mínimo: R$ 1,00');
+    if (!parsed || parsed < minDeposit) {
+      setErr(`Valor mínimo: R$ ${minDeposit.toFixed(2).replace('.', ',')}`);
       return;
     }
     if (!isValidCpf(cpf)) {
@@ -217,7 +226,7 @@ export function DepositPixView() {
             <View style={styles.heading}>
               <Text style={styles.title}>Depositar via PIX</Text>
               <Text style={styles.subtitle}>
-                Escolha ou digite o valor e receba o QR Code instantaneamente.
+                Escolha ou digite o valor. Mínimo: R$ {minDeposit.toFixed(2).replace('.', ',')}.
               </Text>
             </View>
 

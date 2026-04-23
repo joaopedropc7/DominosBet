@@ -11,11 +11,11 @@ const NAV_SECTIONS = [
   {
     label: 'Geral',
     items: [
-      { label: 'Dashboard',   icon: 'view-dashboard-outline', href: '/admin'               },
-      { label: 'Usuários',    icon: 'account-group-outline',  href: '/admin/usuarios'      },
-      { label: 'Transações',  icon: 'swap-horizontal',        href: '/admin/transacoes'    },
-      { label: 'Gateway',     icon: 'credit-card-outline',    href: '/admin/gateway'       },
-      { label: 'Links',       icon: 'link-variant',           href: '/admin/afiliados'     },
+      { label: 'Dashboard',      icon: 'view-dashboard-outline', href: '/admin'                  },
+      { label: 'Usuários',       icon: 'account-group-outline',  href: '/admin/usuarios'         },
+      { label: 'Transações',     icon: 'swap-horizontal',        href: '/admin/transacoes'       },
+      { label: 'Gateway',        icon: 'credit-card-outline',    href: '/admin/gateway'          },
+      { label: 'Configurações',  icon: 'cog-outline',            href: '/admin/configuracoes'    },
     ],
   },
   {

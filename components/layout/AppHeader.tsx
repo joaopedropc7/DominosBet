@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BrandMark } from './BrandMark';
 import { theme } from '@/theme';
@@ -14,6 +15,8 @@ interface AppHeaderProps {
 }
 
 export function AppHeader({ title, subtitle, compactBrand = true, rightIcon = 'cog-outline', onRightPress, badgeCount }: AppHeaderProps) {
+  const router = useRouter();
+
   return (
     <View style={styles.root}>
       {title ? (
@@ -22,7 +25,9 @@ export function AppHeader({ title, subtitle, compactBrand = true, rightIcon = 'c
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         </View>
       ) : (
-        <BrandMark compact={compactBrand} />
+        <Pressable onPress={() => router.push('/(main)/home')}>
+          <BrandMark compact={compactBrand} />
+        </Pressable>
       )}
       <Pressable onPress={onRightPress} style={styles.action}>
         <MaterialCommunityIcons name={rightIcon} size={22} color={theme.colors.primary} />
