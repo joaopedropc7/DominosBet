@@ -43,6 +43,12 @@ export function WalletScreenView() {
             icon={<MaterialCommunityIcons name="plus-circle" size={18} color="#241A00" />}
             onPress={() => router.push('/(main)/depositar')}
           />
+          <Button
+            title="Sacar"
+            variant="ghost"
+            icon={<MaterialCommunityIcons name="bank-transfer-out" size={18} color={theme.colors.primary} />}
+            onPress={() => router.push('/(main)/sacar')}
+          />
         </View>
       </Card>
 

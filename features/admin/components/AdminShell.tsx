@@ -19,10 +19,16 @@ const NAV_SECTIONS = [
     ],
   },
   {
+    label: 'Financeiro',
+    items: [
+      { label: 'Saques Jogadores', icon: 'bank-transfer-out',    href: '/admin/saques-jogadores'    },
+      { label: 'Saques Afiliados', icon: 'account-cash-outline', href: '/admin/afiliados-saques'    },
+    ],
+  },
+  {
     label: 'Programa de Afiliados',
     items: [
       { label: 'Afiliados', icon: 'account-plus-outline', href: '/admin/afiliados-cadastros' },
-      { label: 'Saques',    icon: 'bank-transfer-out',    href: '/admin/afiliados-saques'    },
     ],
   },
 ] as const;
