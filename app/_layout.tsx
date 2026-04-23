@@ -3,6 +3,7 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
+import { Platform } from 'react-native';
 import 'react-native-reanimated';
 import {
   Inter_400Regular,
@@ -14,6 +15,7 @@ import { SpaceGrotesk_500Medium, SpaceGrotesk_700Bold } from '@expo-google-fonts
 import { AuthGate } from '@/features/auth/AuthGate';
 import { AuthProvider } from '@/features/auth/AuthProvider';
 import { UserDataProvider } from '@/features/data/UserDataProvider';
+import { supabase } from '@/services/supabase';
 import { theme } from '@/theme';
 
 export { ErrorBoundary } from 'expo-router';
@@ -37,6 +39,33 @@ export default function RootLayout() {
   useEffect(() => {
     if (error) throw error;
   }, [error]);
+
+  // Aplica título e meta tags SEO vindos do banco
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    supabase.rpc('get_seo_settings').then(({ data }) => {
+      if (!data) return;
+      const title = data.seo_title?.trim();
+      const desc  = data.seo_description?.trim();
+      const kw    = data.seo_keywords?.trim();
+
+      if (title) document.title = title;
+
+      function setMeta(name: string, content: string) {
+        if (!content) return;
+        let el = document.querySelector(`meta[name="${name}"]`);
+        if (!el) {
+          el = document.createElement('meta');
+          el.setAttribute('name', name);
+          document.head.appendChild(el);
+        }
+        el.setAttribute('content', content);
+      }
+
+      setMeta('description', desc ?? '');
+      setMeta('keywords',    kw   ?? '');
+    });
+  }, []);
 
   useEffect(() => {
     if (loaded) {
