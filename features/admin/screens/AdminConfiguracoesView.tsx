@@ -141,30 +141,61 @@ export function AdminConfiguracoesView() {
     setSuccess('');
     setSaving(true);
 
+    // n(): converte string para número; retorna null se inválido
+    // null faz o COALESCE no banco preservar o valor antigo
+    const n  = (s: string) => { const v = parseFloat(s); return isNaN(v) ? null : v; };
+    const ni = (s: string) => { const v = parseInt(s);   return isNaN(v) ? null : v; };
+
     const { error: rpcErr } = await supabase.rpc('admin_update_site_settings', {
-      p_seo_title:                  seoTitle.trim(),
-      p_seo_description:            seoDesc.trim(),
-      p_seo_keywords:               seoKeys.trim(),
-      p_aff_cpa:                    parseFloat(affCpa)          || 0,
-      p_aff_baseline:               parseFloat(affBaseline)     || 0,
-      p_aff_chance_cpa:             parseInt(affChanceCpa)      || 0,
-      p_aff_revshare:               parseInt(affRevshare)       || 0,
-      p_aff_revshare_fake:          parseInt(affRevshareFake)   || 0,
-      p_aff_min_withdrawal:         parseFloat(affMinWithdrawal)    || 0,
-      p_aff_max_withdrawal:         parseFloat(affMaxWithdrawal)    || 0,
-      p_aff_daily_withdrawals:      parseInt(affDailyWithdrawals)   || 1,
-      p_player_min_deposit:         parseFloat(playerMinDeposit)    || 1,
-      p_player_min_withdrawal:      parseFloat(playerMinWithdrawal) || 0,
-      p_player_rollover:            parseInt(playerRollover)        || 1,
-      p_player_max_withdrawal:      parseFloat(playerMaxWithdrawal) || 0,
-      p_player_withdrawal_fee:      parseFloat(playerWithdrawalFee) || 0,
-      p_player_first_deposit_bonus: parseInt(playerFirstDepBonus)   || 0,
-      p_player_daily_withdrawals:   parseInt(playerDailyWithdrawals) || 1,
+      p_seo_title:                  seoTitle.trim()    || null,
+      p_seo_description:            seoDesc.trim()     || null,
+      p_seo_keywords:               seoKeys.trim()     || null,
+      p_aff_cpa:                    n(affCpa),
+      p_aff_baseline:               n(affBaseline),
+      p_aff_chance_cpa:             ni(affChanceCpa),
+      p_aff_revshare:               ni(affRevshare),
+      p_aff_revshare_fake:          ni(affRevshareFake),
+      p_aff_min_withdrawal:         n(affMinWithdrawal),
+      p_aff_max_withdrawal:         n(affMaxWithdrawal),
+      p_aff_daily_withdrawals:      ni(affDailyWithdrawals),
+      p_player_min_deposit:         n(playerMinDeposit),
+      p_player_min_withdrawal:      n(playerMinWithdrawal),
+      p_player_rollover:            ni(playerRollover),
+      p_player_max_withdrawal:      n(playerMaxWithdrawal),
+      p_player_withdrawal_fee:      n(playerWithdrawalFee),
+      p_player_first_deposit_bonus: ni(playerFirstDepBonus),
+      p_player_daily_withdrawals:   ni(playerDailyWithdrawals),
     });
 
     setSaving(false);
-    if (rpcErr) setError(rpcErr.message);
-    else        setSuccess('Configurações salvas com sucesso!');
+    if (rpcErr) {
+      setError(rpcErr.message);
+    } else {
+      setSuccess('Configurações salvas com sucesso!');
+      // Recarrega os valores salvos para confirmar que persistiram
+      const { data } = await supabase.rpc('admin_get_site_settings');
+      if (data) {
+        const s = data as SiteSettings;
+        setAffCpa(String(s.aff_cpa));
+        setAffBaseline(String(s.aff_baseline));
+        setAffChanceCpa(String(s.aff_chance_cpa));
+        setAffRevshare(String(s.aff_revshare));
+        setAffRevshareFake(String(s.aff_revshare_fake));
+        setAffMinWithdrawal(String(s.aff_min_withdrawal));
+        setAffMaxWithdrawal(String(s.aff_max_withdrawal));
+        setAffDailyWithdrawals(String(s.aff_daily_withdrawals));
+        setPlayerMinDeposit(String(s.player_min_deposit));
+        setPlayerMinWithdrawal(String(s.player_min_withdrawal));
+        setPlayerRollover(String(s.player_rollover));
+        setPlayerMaxWithdrawal(String(s.player_max_withdrawal));
+        setPlayerWithdrawalFee(String(s.player_withdrawal_fee));
+        setPlayerFirstDepBonus(String(s.player_first_deposit_bonus));
+        setPlayerDailyWithdrawals(String(s.player_daily_withdrawals));
+        setSeoTitle(s.seo_title ?? '');
+        setSeoDesc(s.seo_description ?? '');
+        setSeoKeys(s.seo_keywords ?? '');
+      }
+    }
   }
 
   const TABS: { key: Tab; label: string; icon: string }[] = [
