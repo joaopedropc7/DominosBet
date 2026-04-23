@@ -60,8 +60,10 @@ export function DepositPixView() {
   // ── QR state ────────────────────────────────────────────
   const [step, setStep] = useState<Step>('form');
   const [qrcode, setQrcode] = useState('');
+  const [depositId, setDepositId] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [paid, setPaid] = useState(false);
 
   // Pré-preenche CPF do perfil
   useEffect(() => {
@@ -118,6 +120,7 @@ export function DepositPixView() {
       const res = await generatePix(parsed);
       setQrcode(res.pix?.qrcode ?? '');
       setExpiresAt(res.pix?.expiresAt ?? null);
+      setDepositId(res.depositId);
       setStep('qr');
     } catch (e: any) {
       setErr(e?.message ?? 'Erro ao gerar PIX.');
@@ -132,12 +135,39 @@ export function DepositPixView() {
     setTimeout(() => setCopied(false), 2500);
   }
 
+  // ── Realtime: escuta confirmação de pagamento ───────────
+  useEffect(() => {
+    if (step !== 'qr' || !depositId) return;
+
+    const channel = supabase
+      .channel(`deposit-${depositId}`)
+      .on(
+        'postgres_changes',
+        {
+          event:  'UPDATE',
+          schema: 'public',
+          table:  'deposits',
+          filter: `external_ref=eq.${depositId}`,
+        },
+        (payload) => {
+          if (payload.new?.status === 'paid') {
+            setPaid(true);
+          }
+        },
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [step, depositId]);
+
   function handleNewDeposit() {
     setStep('form');
     setAmount('');
     setQrcode('');
+    setDepositId(null);
     setExpiresAt(null);
     setCopied(false);
+    setPaid(false);
     setErr('');
   }
 
@@ -156,6 +186,27 @@ export function DepositPixView() {
         compactBrand
         onRightPress={() => router.push('/(main)/configuracoes')}
       />
+
+      {/* ── Popup pagamento confirmado ── */}
+      {paid && (
+        <View style={styles.overlay}>
+          <View style={styles.successBox}>
+            <View style={styles.successIcon}>
+              <MaterialCommunityIcons name="check-circle" size={56} color="#22C55E" />
+            </View>
+            <Text style={styles.successTitle}>Pagamento confirmado!</Text>
+            <Text style={styles.successDesc}>
+              Seu saldo foi creditado com sucesso.
+            </Text>
+            <Pressable
+              style={styles.successBtn}
+              onPress={() => router.replace('/(main)/home')}
+            >
+              <Text style={styles.successBtnText}>Ir para o início</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -596,5 +647,60 @@ const styles = StyleSheet.create({
   },
   copyBtnTextDone: {
     color: theme.colors.background,
+  },
+
+  // ── Popup pagamento confirmado ──────────────────────────
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 999,
+    padding: theme.spacing.xl,
+  },
+  successBox: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.xl,
+    padding: theme.spacing.xl,
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: '#22C55E44',
+  },
+  successIcon: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: '#22C55E18',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successTitle: {
+    color: theme.colors.text,
+    fontFamily: theme.typography.fontFamily.display,
+    fontSize: 26,
+    textAlign: 'center',
+  },
+  successDesc: {
+    color: theme.colors.textSoft,
+    fontFamily: theme.typography.fontFamily.bodyMedium,
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  successBtn: {
+    marginTop: theme.spacing.sm,
+    width: '100%',
+    backgroundColor: '#22C55E',
+    borderRadius: theme.radius.lg,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  successBtnText: {
+    color: '#fff',
+    fontFamily: theme.typography.fontFamily.display,
+    fontSize: 16,
   },
 });
