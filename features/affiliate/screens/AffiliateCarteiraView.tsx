@@ -13,6 +13,12 @@ type Withdrawal = {
   updated_at: string;
 };
 
+type AffiliateSettings = {
+  aff_min_withdrawal: number;
+  aff_max_withdrawal: number;
+  aff_daily_withdrawals: number;
+};
+
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   pending:  { label: 'Pendente',  color: '#F59E0B' },
   approved: { label: 'Aprovado',  color: '#10B981' },
@@ -25,22 +31,28 @@ const fmt = (n: number) =>
 export function AffiliateCarteiraView() {
   const { affiliate, refreshAffiliate } = useAffiliateGuard();
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
+  const [settings, setSettings]       = useState<AffiliateSettings>({ aff_min_withdrawal: 50, aff_max_withdrawal: 10000, aff_daily_withdrawals: 1 });
   const [loading, setLoading]         = useState(true);
   const [requesting, setRequesting]   = useState(false);
   const [error, setError]             = useState('');
   const [success, setSuccess]         = useState('');
 
   useEffect(() => {
-    supabase.rpc('get_affiliate_withdrawals').then(({ data }) => {
-      if (data) setWithdrawals(data as Withdrawal[]);
+    Promise.all([
+      supabase.rpc('get_affiliate_withdrawals'),
+      supabase.rpc('get_affiliate_settings'),
+    ]).then(([wdRes, settingsRes]) => {
+      if (wdRes.data) setWithdrawals(wdRes.data as Withdrawal[]);
+      if (settingsRes.data) setSettings(settingsRes.data as AffiliateSettings);
       setLoading(false);
     });
   }, []);
 
   async function handleRequestWithdrawal() {
     if (!affiliate) return;
-    if (affiliate.balance < 50) {
-      setError('Saldo mínimo para saque é R$ 50,00');
+    const minWd = Number(settings.aff_min_withdrawal);
+    if (affiliate.balance < minWd) {
+      setError(`Saldo mínimo para saque é R$ ${minWd.toFixed(2).replace('.', ',')}`);
       return;
     }
     if (!affiliate.pix_key) {
@@ -116,7 +128,7 @@ export function AffiliateCarteiraView() {
         <View style={styles.actionCardLeft}>
           <Text style={styles.actionCardTitle}>Solicitar Saque</Text>
           <Text style={styles.actionCardBody}>
-            Saque mínimo: R$ 50,00 · Processamento em até 48h via PIX
+            Saque mínimo: R$ {Number(settings.aff_min_withdrawal).toFixed(2).replace('.', ',')} · Processamento em até 48h via PIX
           </Text>
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
           {success ? <Text style={styles.successText}>{success}</Text> : null}
