@@ -48,28 +48,39 @@ export function WalletScreenView() {
 
       <View style={[styles.sectionHeader, isCompact && styles.sectionHeaderCompact]}>
         <Text style={[styles.sectionTitle, isCompact && styles.sectionTitleCompact]}>Atividade Recente</Text>
-        <Text style={styles.sectionAction}>Histórico</Text>
+        <Text style={styles.sectionAction}>
+          {walletTransactions.length} transações
+        </Text>
       </View>
 
       <View style={styles.stack}>
         {activityItems.map((activity) => {
-          const valueColor =
-            activity.highlight === 'cyan'
-              ? theme.colors.accent
-              : activity.highlight === 'gold'
-                ? theme.colors.primary
-                : theme.colors.textSoft;
+          const isCyan = activity.highlight === 'cyan';
+          const isGold = activity.highlight === 'gold';
+          const valueColor = isCyan
+            ? theme.colors.accent
+            : isGold
+              ? theme.colors.primary
+              : theme.colors.textSoft;
+
+          const iconName = isCyan
+            ? 'wallet-plus-outline'
+            : isGold
+              ? 'trophy-outline'
+              : 'login';
+
+          // Depósitos e bônus mostram valor em reais; partidas em XD
+          const isMonetary = isCyan;
+          const displayValue = isMonetary
+            ? `${activity.value > 0 ? '+' : ''}R$ ${Math.abs(activity.value).toLocaleString('pt-BR')}`
+            : `${activity.value > 0 ? '+' : ''}${activity.value} XD`;
 
           return (
             <Card key={activity.id} variant={activity.highlight === 'muted' ? 'low' : 'high'}>
               <View style={[styles.activityRow, isPhone && styles.activityRowMobile]}>
                 <View style={styles.activityLeft}>
                   <View style={styles.activityIcon}>
-                    <MaterialCommunityIcons
-                      name={activity.highlight === 'cyan' ? 'wallet-plus-outline' : activity.highlight === 'gold' ? 'trophy-outline' : 'login'}
-                      size={20}
-                      color={valueColor}
-                    />
+                    <MaterialCommunityIcons name={iconName} size={20} color={valueColor} />
                   </View>
                   <View>
                     <Text style={styles.activityTitle}>{activity.title}</Text>
@@ -78,8 +89,7 @@ export function WalletScreenView() {
                 </View>
                 <View style={[styles.activityRight, isPhone && styles.activityRightMobile]}>
                   <Text style={[styles.activityValue, { color: valueColor }]}>
-                    {activity.value > 0 ? '+' : ''}
-                    {activity.value}
+                    {displayValue}
                   </Text>
                   <Text style={styles.activityTime}>{activity.timeLabel}</Text>
                 </View>
