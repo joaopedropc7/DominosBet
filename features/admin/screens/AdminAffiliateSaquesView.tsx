@@ -1,96 +1,121 @@
 import { useEffect, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
-  ActivityIndicator, FlatList, Modal, Pressable,
+  ActivityIndicator, Modal, Pressable, ScrollView,
   StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { supabase } from '@/services/supabase';
 import { theme } from '@/theme';
 
-type WithdrawalRow = {
+type Withdrawal = {
   id: string;
+  affiliate_id: string;
   affiliate_name: string;
   affiliate_email: string;
+  destination_name: string;
+  destination_doc: string;
   amount: number;
-  status: 'pending' | 'approved' | 'rejected';
   pix_key_type: string;
   pix_key: string;
+  status: string;
+  external_ref: string;
+  orama_id: string | null;
   admin_notes: string | null;
   created_at: string;
-  updated_at: string;
 };
 
-const STATUS_CFG: Record<string, { label: string; color: string }> = {
-  pending:  { label: 'Pendente',  color: '#F59E0B' },
-  approved: { label: 'Aprovado',  color: '#10B981' },
-  rejected: { label: 'Recusado', color: '#EF4444' },
+type StatusFilter = 'all' | 'pending' | 'processing' | 'paid' | 'rejected';
+
+const STATUS_OPTS: { key: StatusFilter; label: string }[] = [
+  { key: 'all',        label: 'Todos'       },
+  { key: 'pending',    label: 'Em análise'  },
+  { key: 'processing', label: 'Processando' },
+  { key: 'paid',       label: 'Pagos'       },
+  { key: 'rejected',   label: 'Recusados'   },
+];
+
+const STATUS_COLOR: Record<string, string> = {
+  pending:    '#F59E0B',
+  processing: '#60A5FA',
+  paid:       '#10B981',
+  rejected:   '#EF4444',
 };
 
-const FILTER_TABS = [
-  { key: 'pending',  label: 'Pendentes' },
-  { key: 'approved', label: 'Aprovados' },
-  { key: 'rejected', label: 'Recusados' },
-  { key: '',         label: 'Todos'     },
-] as const;
+const STATUS_LABEL: Record<string, string> = {
+  pending:    'Em análise',
+  processing: 'Processando',
+  paid:       'Pago',
+  rejected:   'Recusado',
+};
 
 const fmt = (n: number) =>
-  `R$ ${n.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
+  `R$ ${Number(n).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
 
 export function AdminAffiliateSaquesView() {
-  const [items,   setItems]   = useState<WithdrawalRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filter,  setFilter]  = useState<string>('pending');
-  const [error,   setError]   = useState('');
+  const [items,         setItems]         = useState<Withdrawal[]>([]);
+  const [loading,       setLoading]       = useState(true);
+  const [filter,        setFilter]        = useState<StatusFilter>('pending');
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const [selected,  setSelected]  = useState<WithdrawalRow | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [saving,    setSaving]    = useState(false);
-  const [newStatus, setNewStatus] = useState<'approved' | 'rejected' | 'pending'>('pending');
-  const [notes,     setNotes]     = useState('');
+  // Modal de rejeição
+  const [rejectId,   setRejectId]   = useState<string | null>(null);
+  const [rejectNote, setRejectNote] = useState('');
 
   async function load() {
     setLoading(true);
-    setError('');
-    const { data, error: rpcErr } = await supabase.rpc('admin_list_withdrawals', {
-      p_status: filter || null,
+    const { data } = await supabase.rpc('admin_list_affiliate_withdrawals', {
+      p_status: filter === 'all' ? null : filter,
     });
-    if (rpcErr) {
-      setError(rpcErr.message);
-    } else {
-      setItems((data ?? []) as WithdrawalRow[]);
-    }
+    if (data) setItems(data as Withdrawal[]);
     setLoading(false);
   }
 
   useEffect(() => { load(); }, [filter]);
 
-  function openModal(item: WithdrawalRow) {
-    setSelected(item);
-    setNewStatus(item.status);
-    setNotes(item.admin_notes ?? '');
-    setModalOpen(true);
-  }
-
-  async function handleSave() {
-    if (!selected) return;
-    setSaving(true);
-    const { error: rpcErr } = await supabase.rpc('admin_process_withdrawal', {
-      p_withdrawal_id: selected.id,
-      p_status:        newStatus,
-      p_notes:         notes.trim() || null,
-    });
-    setSaving(false);
-    if (rpcErr) {
-      setError(rpcErr.message);
-    } else {
-      setModalOpen(false);
-      load();
+  async function handleApprove(wd: Withdrawal) {
+    setActionLoading(wd.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/pix-out-affiliate', {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${session?.access_token ?? ''}`,
+        },
+        body: JSON.stringify({ withdrawalId: wd.id }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert(`Erro ao enviar PIX: ${json.error ?? res.status}`);
+      } else {
+        await load();
+      }
+    } catch (e: any) {
+      alert(`Erro: ${e?.message}`);
+    } finally {
+      setActionLoading(null);
     }
   }
 
-  const pendingTotal = items
-    .filter(i => i.status === 'pending')
-    .reduce((sum, i) => sum + i.amount, 0);
+  async function handleReject() {
+    if (!rejectId) return;
+    setActionLoading(rejectId);
+    const { error } = await supabase.rpc('admin_reject_affiliate_withdrawal', {
+      p_withdrawal_id: rejectId,
+      p_notes:         rejectNote.trim() || null,
+    });
+    setActionLoading(null);
+    setRejectId(null);
+    setRejectNote('');
+    if (error) {
+      alert(`Erro: ${error.message}`);
+    } else {
+      await load();
+    }
+  }
+
+  const pendingItems = items.filter(i => i.status === 'pending');
+  const pendingTotal = pendingItems.reduce((s, i) => s + Number(i.amount), 0);
 
   return (
     <View style={styles.root}>
@@ -98,179 +123,219 @@ export function AdminAffiliateSaquesView() {
       <View style={styles.pageHeader}>
         <View>
           <Text style={styles.pageTitle}>Saques de Afiliados</Text>
-          <Text style={styles.pageSubtitle}>Processar pedidos de saque via PIX</Text>
+          <Text style={styles.pageSubtitle}>Aprovar e enviar via PIX-out OramaPay</Text>
         </View>
         <View style={styles.headerRight}>
-          {filter === 'pending' && items.length > 0 && (
-            <View style={styles.totalPending}>
-              <Text style={styles.totalPendingLabel}>Total pendente</Text>
-              <Text style={styles.totalPendingValue}>{fmt(pendingTotal)}</Text>
+          {filter === 'pending' && pendingItems.length > 0 && (
+            <View style={styles.summaryBadge}>
+              <Text style={styles.summaryLabel}>{pendingItems.length} pendentes</Text>
+              <Text style={styles.summaryValue}>{fmt(pendingTotal)}</Text>
             </View>
           )}
           <Pressable
             onPress={load}
-            style={({ pressed }) => [styles.refreshBtn, pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.7 }]}
           >
             <MaterialCommunityIcons name="refresh" size={18} color={theme.colors.textMuted} />
           </Pressable>
         </View>
       </View>
 
-      {/* Filter tabs */}
-      <View style={styles.tabs}>
-        {FILTER_TABS.map(tab => (
+      {/* Filter chips */}
+      <View style={styles.filters}>
+        {STATUS_OPTS.map(opt => (
           <Pressable
-            key={tab.key}
-            onPress={() => setFilter(tab.key)}
-            style={[styles.tab, filter === tab.key && styles.tabActive]}
+            key={opt.key}
+            onPress={() => setFilter(opt.key)}
+            style={[styles.chip, filter === opt.key && styles.chipActive]}
           >
-            <Text style={[styles.tabText, filter === tab.key && styles.tabTextActive]}>
-              {tab.label}
+            <Text style={[styles.chipText, filter === opt.key && styles.chipTextActive]}>
+              {opt.label}
             </Text>
           </Pressable>
         ))}
       </View>
 
-      {/* Table header */}
-      <View style={styles.tableHeader}>
-        <Text style={[styles.colAfil, styles.colHead]}>Afiliado</Text>
-        <Text style={[styles.col, styles.colHead]}>Valor</Text>
-        <Text style={[styles.colPix, styles.colHead]}>Chave PIX</Text>
-        <Text style={[styles.col, styles.colHead]}>Pedido em</Text>
-        <Text style={[styles.col, styles.colHead]}>Status</Text>
-        <View style={styles.colAction} />
-      </View>
-
       {loading ? (
         <ActivityIndicator color={theme.colors.primary} style={{ marginTop: 60 }} />
-      ) : error ? (
-        <View style={styles.errorBox}>
-          <MaterialCommunityIcons name="alert-circle-outline" size={18} color={theme.colors.danger} />
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
       ) : (
-        <FlatList
-          data={items}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.list}
-          renderItem={({ item, index }) => {
-            const s = STATUS_CFG[item.status] ?? { label: item.status, color: theme.colors.textFaint };
-            return (
-              <View style={[styles.tableRow, index % 2 === 0 && styles.tableRowEven]}>
-                <View style={styles.colAfil}>
-                  <Text style={styles.cellName}>{item.affiliate_name}</Text>
-                  <Text style={styles.cellEmail}>{item.affiliate_email}</Text>
-                </View>
-                <Text style={[styles.col, styles.cellAmount]}>{fmt(item.amount)}</Text>
-                <View style={styles.colPix}>
-                  <Text style={styles.cellText}>{item.pix_key}</Text>
-                  <Text style={styles.cellEmail}>{item.pix_key_type}</Text>
-                </View>
-                <Text style={[styles.col, styles.cellDate]}>
-                  {new Date(item.created_at).toLocaleDateString('pt-BR')}
-                </Text>
-                <View style={styles.col}>
-                  <View style={[styles.badge, { backgroundColor: s.color + '22' }]}>
-                    <Text style={[styles.badgeText, { color: s.color }]}>{s.label}</Text>
-                  </View>
-                </View>
-                <View style={styles.colAction}>
-                  <Pressable
-                    onPress={() => openModal(item)}
-                    style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.7 }]}
-                  >
-                    <MaterialCommunityIcons name="pencil-outline" size={16} color={theme.colors.textMuted} />
-                  </Pressable>
-                </View>
-              </View>
-            );
-          }}
-          ListEmptyComponent={
+        <ScrollView contentContainerStyle={styles.list}>
+          {items.length === 0 ? (
             <View style={styles.empty}>
-              <MaterialCommunityIcons name="bank-transfer-out" size={36} color={theme.colors.textFaint} />
+              <MaterialCommunityIcons name="account-cash-outline" size={40} color={theme.colors.textFaint} />
               <Text style={styles.emptyText}>Nenhum saque encontrado.</Text>
             </View>
-          }
-        />
-      )}
+          ) : items.map(wd => {
+            const color = STATUS_COLOR[wd.status] ?? theme.colors.textFaint;
+            const label = STATUS_LABEL[wd.status] ?? wd.status;
+            const isLoading = actionLoading === wd.id;
 
-      {/* Process modal */}
-      <Modal visible={modalOpen} transparent animationType="fade" onRequestClose={() => setModalOpen(false)}>
-        <Pressable style={styles.overlay} onPress={() => setModalOpen(false)}>
-          <Pressable style={styles.modal} onPress={() => {}}>
-            <Text style={styles.modalTitle}>Processar Saque</Text>
-
-            {selected && (
-              <>
-                <View style={styles.detailBox}>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Afiliado</Text>
-                    <Text style={styles.detailValue}>{selected.affiliate_name}</Text>
+            return (
+              <View key={wd.id} style={styles.card}>
+                {/* Top row: name + status + amount */}
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardLeft}>
+                    <View style={styles.avatarCircle}>
+                      <MaterialCommunityIcons name="account-cash-outline" size={18} color={theme.colors.primary} />
+                    </View>
+                    <View>
+                      <Text style={styles.cardName}>{wd.affiliate_name}</Text>
+                      <Text style={styles.cardEmail}>{wd.affiliate_email}</Text>
+                    </View>
                   </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Valor</Text>
-                    <Text style={[styles.detailValue, { color: theme.colors.primary }]}>
-                      {fmt(selected.amount)}
+                  <View style={styles.cardRight}>
+                    <Text style={styles.cardAmount}>{fmt(wd.amount)}</Text>
+                    <View style={[styles.badge, { backgroundColor: color + '22' }]}>
+                      <Text style={[styles.badgeText, { color }]}>{label}</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* PIX details */}
+                <View style={styles.detailGrid}>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Chave PIX</Text>
+                    <Text style={styles.detailValue}>{wd.pix_key}</Text>
+                  </View>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Tipo</Text>
+                    <Text style={styles.detailValue}>{wd.pix_key_type}</Text>
+                  </View>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Titular</Text>
+                    <Text style={styles.detailValue}>{wd.destination_name}</Text>
+                  </View>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>CPF/CNPJ</Text>
+                    <Text style={styles.detailValue}>
+                      {wd.destination_doc ? wd.destination_doc : '—'}
                     </Text>
                   </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Chave PIX</Text>
-                    <Text style={styles.detailValue}>{selected.pix_key}</Text>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Pedido em</Text>
+                    <Text style={styles.detailValue}>
+                      {new Date(wd.created_at).toLocaleString('pt-BR', {
+                        day: '2-digit', month: '2-digit', year: '2-digit',
+                        hour: '2-digit', minute: '2-digit',
+                      })}
+                    </Text>
                   </View>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Tipo</Text>
-                    <Text style={styles.detailValue}>{selected.pix_key_type}</Text>
-                  </View>
+                  {wd.orama_id && (
+                    <View style={styles.detailItem}>
+                      <Text style={styles.detailLabel}>OramaPay ID</Text>
+                      <Text style={styles.detailValue}>#{wd.orama_id.slice(-8)}</Text>
+                    </View>
+                  )}
                 </View>
 
-                {/* Status selector */}
-                <Text style={styles.fieldLabel}>Decisão</Text>
-                <View style={styles.statusRow}>
-                  {(['approved', 'pending', 'rejected'] as const).map(s => (
+                {wd.admin_notes ? (
+                  <View style={styles.notesBox}>
+                    <Text style={styles.notesText}>{wd.admin_notes}</Text>
+                  </View>
+                ) : null}
+
+                {/* Rollback — TEMPORÁRIO, apenas para testes */}
+                {wd.status === 'paid' && (
+                  <Pressable
+                    style={({ pressed }) => [styles.rollbackBtn, pressed && { opacity: 0.7 }]}
+                    onPress={async () => {
+                      setActionLoading(wd.id);
+                      const { error } = await supabase.rpc('admin_rollback_affiliate_withdrawal', {
+                        p_withdrawal_id: wd.id,
+                      });
+                      setActionLoading(null);
+                      if (error) alert(`Erro: ${error.message}`);
+                      else await load();
+                    }}
+                    disabled={isLoading}
+                  >
+                    {isLoading
+                      ? <ActivityIndicator size="small" color="#8B5CF6" />
+                      : <>
+                          <MaterialCommunityIcons name="undo" size={14} color="#8B5CF6" />
+                          <Text style={styles.rollbackBtnText}>Rollback (teste)</Text>
+                        </>
+                    }
+                  </Pressable>
+                )}
+
+                {/* Actions — pending: approve + reject | processing: retry */}
+                {(wd.status === 'pending' || wd.status === 'processing') && (
+                  <View style={styles.actions}>
                     <Pressable
-                      key={s}
-                      onPress={() => setNewStatus(s)}
-                      style={[
-                        styles.statusBtn,
-                        { borderColor: STATUS_CFG[s].color },
-                        newStatus === s && { backgroundColor: STATUS_CFG[s].color + '33' },
+                      style={({ pressed }) => [
+                        styles.actionBtn, styles.approveBtn,
+                        (pressed || isLoading) && { opacity: 0.75 },
                       ]}
+                      onPress={() => handleApprove(wd)}
+                      disabled={isLoading}
                     >
-                      <Text style={[styles.statusBtnText, { color: STATUS_CFG[s].color }]}>
-                        {STATUS_CFG[s].label}
-                      </Text>
+                      {isLoading
+                        ? <ActivityIndicator size="small" color="#241A00" />
+                        : <>
+                            <MaterialCommunityIcons
+                              name={wd.status === 'processing' ? 'refresh' : 'send'}
+                              size={15}
+                              color="#241A00"
+                            />
+                            <Text style={styles.approveBtnText}>
+                              {wd.status === 'processing' ? 'Retentar PIX' : 'Aprovar e Enviar PIX'}
+                            </Text>
+                          </>
+                      }
                     </Pressable>
-                  ))}
-                </View>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.actionBtn, styles.rejectBtn,
+                        pressed && { opacity: 0.7 },
+                      ]}
+                      onPress={() => { setRejectId(wd.id); setRejectNote(''); }}
+                      disabled={isLoading}
+                    >
+                      <MaterialCommunityIcons name="close" size={15} color={theme.colors.danger} />
+                      <Text style={styles.rejectBtnText}>Recusar</Text>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            );
+          })}
+        </ScrollView>
+      )}
 
-                <Text style={styles.fieldLabel}>Notas internas</Text>
-                <TextInput
-                  style={[styles.fieldInput, styles.fieldInputMulti]}
-                  value={notes}
-                  onChangeText={setNotes}
-                  multiline
-                  numberOfLines={3}
-                  placeholder="Ex: PIX enviado, comprovante #12345…"
-                  placeholderTextColor={theme.colors.textFaint}
-                />
-              </>
-            )}
-
+      {/* Reject modal */}
+      <Modal visible={!!rejectId} transparent animationType="fade" onRequestClose={() => setRejectId(null)}>
+        <Pressable style={styles.overlay} onPress={() => setRejectId(null)}>
+          <Pressable style={styles.modal} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Recusar saque</Text>
+            <Text style={styles.modalSub}>
+              O saldo será devolvido ao afiliado automaticamente.
+            </Text>
+            <Text style={styles.fieldLabel}>Motivo (opcional)</Text>
+            <TextInput
+              style={[styles.fieldInput, styles.fieldInputMulti]}
+              value={rejectNote}
+              onChangeText={setRejectNote}
+              multiline
+              numberOfLines={3}
+              placeholder="Ex: dados bancários incorretos"
+              placeholderTextColor={theme.colors.textFaint}
+            />
             <View style={styles.modalActions}>
               <Pressable
-                onPress={() => setModalOpen(false)}
+                onPress={() => setRejectId(null)}
                 style={({ pressed }) => [styles.modalBtn, styles.modalBtnCancel, pressed && { opacity: 0.7 }]}
               >
                 <Text style={styles.modalBtnText}>Cancelar</Text>
               </Pressable>
               <Pressable
-                onPress={handleSave}
-                disabled={saving}
-                style={({ pressed }) => [styles.modalBtn, styles.modalBtnConfirm, pressed && { opacity: 0.8 }]}
+                onPress={handleReject}
+                disabled={!!actionLoading}
+                style={({ pressed }) => [styles.modalBtn, styles.modalBtnReject, pressed && { opacity: 0.8 }]}
               >
-                {saving
-                  ? <ActivityIndicator color="#241A00" size="small" />
-                  : <Text style={[styles.modalBtnText, { color: '#241A00' }]}>Salvar</Text>}
+                {actionLoading
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={[styles.modalBtnText, { color: '#fff' }]}>Confirmar recusa</Text>}
               </Pressable>
             </View>
           </Pressable>
@@ -284,120 +349,101 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.background },
 
   pageHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     padding: theme.spacing.xl,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.outline,
+    borderBottomWidth: 1, borderBottomColor: theme.colors.outline,
   },
-  pageTitle: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.display, fontSize: 26 },
+  pageTitle:    { color: theme.colors.text, fontFamily: theme.typography.fontFamily.display, fontSize: 26 },
   pageSubtitle: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 13, marginTop: 2 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
-  totalPending: {
-    backgroundColor: '#F59E0B22',
-    borderRadius: theme.radius.md,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 8,
-    alignItems: 'flex-end',
+  headerRight:  { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
+  summaryBadge: {
+    backgroundColor: '#F59E0B22', borderRadius: theme.radius.md,
+    paddingHorizontal: theme.spacing.md, paddingVertical: 8, alignItems: 'flex-end',
   },
-  totalPendingLabel: { color: '#F59E0B', fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.8 },
-  totalPendingValue: { color: '#F59E0B', fontFamily: theme.typography.fontFamily.display, fontSize: 18 },
-  refreshBtn: {
+  summaryLabel: { color: '#F59E0B', fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.8 },
+  summaryValue: { color: '#F59E0B', fontFamily: theme.typography.fontFamily.display, fontSize: 18 },
+  iconBtn: {
     width: 36, height: 36, borderRadius: theme.radius.md,
     backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.outline,
     alignItems: 'center', justifyContent: 'center',
   },
 
-  tabs: {
-    flexDirection: 'row', gap: theme.spacing.xs,
+  filters: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs,
     paddingHorizontal: theme.spacing.xl, paddingVertical: theme.spacing.sm,
     borderBottomWidth: 1, borderBottomColor: theme.colors.outline,
   },
-  tab: {
-    paddingHorizontal: theme.spacing.md, paddingVertical: 7,
-    borderRadius: theme.radius.pill, borderWidth: 1, borderColor: theme.colors.outline,
-  },
-  tabActive: { backgroundColor: theme.colors.primarySoft, borderColor: theme.colors.primary },
-  tabText: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 13 },
-  tabTextActive: { color: theme.colors.primary, fontFamily: theme.typography.fontFamily.bodyBold },
+  chip:         { paddingHorizontal: theme.spacing.md, paddingVertical: 7, borderRadius: theme.radius.pill, borderWidth: 1, borderColor: theme.colors.outline },
+  chipActive:   { backgroundColor: theme.colors.primarySoft, borderColor: theme.colors.primary },
+  chipText:     { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 13 },
+  chipTextActive: { color: theme.colors.primary, fontFamily: theme.typography.fontFamily.bodyBold },
 
-  tableHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: theme.spacing.xl, paddingVertical: theme.spacing.sm,
-    borderBottomWidth: 1, borderBottomColor: theme.colors.outline,
-    backgroundColor: theme.colors.surface,
-  },
-  tableRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: theme.spacing.xl, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: theme.colors.outline,
-  },
-  tableRowEven: { backgroundColor: 'rgba(255,255,255,0.015)' },
-
-  col: { flex: 1 },
-  colAfil: { flex: 2 },
-  colPix: { flex: 2 },
-  colAction: { width: 40, alignItems: 'center' },
-  colHead: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8 },
-
-  cellName: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 13 },
-  cellEmail: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.body, fontSize: 11 },
-  cellAmount: { color: theme.colors.primary, fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 14 },
-  cellText: { color: theme.colors.textSoft, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 13 },
-  cellDate: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.body, fontSize: 12 },
-
-  badge: { alignSelf: 'flex-start', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText: { fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 11 },
-
-  editBtn: {
-    width: 32, height: 32, borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.surfaceHigh, alignItems: 'center', justifyContent: 'center',
-  },
-
-  list: { paddingBottom: 60 },
+  list: { padding: theme.spacing.xl, gap: theme.spacing.md, paddingBottom: 60 },
   empty: { alignItems: 'center', gap: theme.spacing.md, marginTop: 80 },
   emptyText: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 14 },
 
-  errorBox: {
-    flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm,
-    margin: theme.spacing.xl, backgroundColor: 'rgba(255,139,135,0.10)',
-    borderRadius: theme.radius.md, padding: theme.spacing.md,
+  card: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1, borderColor: theme.colors.outline,
+    padding: theme.spacing.lg,
+    gap: theme.spacing.md,
   },
-  errorText: { color: theme.colors.danger, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 14, flex: 1 },
+
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  cardLeft:   { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md, flex: 1 },
+  cardRight:  { alignItems: 'flex-end', gap: 4 },
+  avatarCircle: {
+    width: 40, height: 40, borderRadius: 999,
+    backgroundColor: theme.colors.primarySoft,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  cardName:   { color: theme.colors.text, fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 15 },
+  cardEmail:  { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.body, fontSize: 12 },
+  cardAmount: { color: theme.colors.primary, fontFamily: theme.typography.fontFamily.display, fontSize: 20 },
+
+  badge:     { alignSelf: 'flex-end', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  badgeText: { fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 11 },
+
+  detailGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm },
+  detailItem: { minWidth: 140, flex: 1 },
+  detailLabel: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.8 },
+  detailValue: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 13, marginTop: 2 },
+
+  notesBox: {
+    backgroundColor: theme.colors.surfaceInset, borderRadius: theme.radius.md,
+    paddingHorizontal: theme.spacing.md, paddingVertical: 8,
+  },
+  notesText: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.body, fontSize: 12 },
+
+  rollbackBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 8, borderRadius: theme.radius.md,
+    borderWidth: 1, borderColor: '#8B5CF6', borderStyle: 'dashed' as any,
+  },
+  rollbackBtnText: { color: '#8B5CF6', fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 12 },
+
+  actions:    { flexDirection: 'row', gap: theme.spacing.sm },
+  actionBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 11, borderRadius: theme.radius.lg, borderWidth: 1,
+  },
+  approveBtn:     { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  approveBtnText: { color: '#241A00', fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 13 },
+  rejectBtn:      { backgroundColor: 'transparent', borderColor: theme.colors.danger },
+  rejectBtnText:  { color: theme.colors.danger, fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 13 },
 
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
   modal: {
-    width: 480,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.xl,
-    borderWidth: 1,
-    borderColor: theme.colors.outline,
-    padding: theme.spacing.xl,
-    gap: theme.spacing.sm,
+    width: 440, backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.xl, borderWidth: 1, borderColor: theme.colors.outline,
+    padding: theme.spacing.xl, gap: theme.spacing.sm,
   },
-  modalTitle: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.display, fontSize: 20, marginBottom: 4 },
-
-  detailBox: {
-    backgroundColor: theme.colors.surfaceInset,
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.outline,
-    padding: theme.spacing.md,
-    gap: 8,
-    marginBottom: theme.spacing.xs,
-  },
-  detailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  detailLabel: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 12 },
-  detailValue: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 13 },
-
-  statusRow: { flexDirection: 'row', gap: theme.spacing.sm, marginBottom: theme.spacing.xs },
-  statusBtn: { flex: 1, borderWidth: 1, borderRadius: theme.radius.md, paddingVertical: 8, alignItems: 'center' },
-  statusBtnText: { fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 13 },
-
+  modalTitle: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.display, fontSize: 20 },
+  modalSub:   { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 13 },
   fieldLabel: {
     color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.bodyBold,
-    fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8,
+    fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 4,
   },
   fieldInput: {
     backgroundColor: theme.colors.surfaceHigh, borderRadius: theme.radius.md,
@@ -407,10 +453,9 @@ const styles = StyleSheet.create({
     outlineStyle: 'none',
   } as any,
   fieldInputMulti: { minHeight: 70, textAlignVertical: 'top' },
-
   modalActions: { flexDirection: 'row', gap: theme.spacing.sm, marginTop: theme.spacing.sm },
   modalBtn: { flex: 1, borderRadius: theme.radius.lg, paddingVertical: 13, alignItems: 'center', justifyContent: 'center' },
   modalBtnCancel: { backgroundColor: theme.colors.surfaceHigh, borderWidth: 1, borderColor: theme.colors.outline },
-  modalBtnConfirm: { backgroundColor: theme.colors.primary },
-  modalBtnText: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 14 },
+  modalBtnReject: { backgroundColor: theme.colors.danger },
+  modalBtnText:   { color: theme.colors.text, fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 14 },
 });

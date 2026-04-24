@@ -1,11 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
-const ORAMA_URL      = 'https://api.oramapay.com/api/v1/transactions/pix-out';
-const USER_AGENT     = 'DominosBet/1.0 (+suporte@dominosbet.com.br)';
-const SUPABASE_URL   = 'https://jqrehnvxoxsykchtxguv.supabase.co';
+const ORAMA_URL         = 'https://api.oramapay.com/api/v1/transactions/pix-out';
+const USER_AGENT        = 'DominosBet/1.0 (+suporte@dominosbet.com.br)';
+const SUPABASE_URL      = 'https://jqrehnvxoxsykchtxguv.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxcmVobnZ4b3hzeWtjaHR4Z3V2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMjgxMTcsImV4cCI6MjA5MDkwNDExN30.2I_6o3dmxqujRotZS8NtZwDLpkeGTXJyEFpKIq6hqO8';
-const WEBHOOK_URL    = 'https://www.dominosbet.com.br/api/webhook-withdrawal';
+const WEBHOOK_URL       = 'https://www.dominosbet.com.br/api/webhook-withdrawal';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -34,10 +34,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'withdrawalId é obrigatório.' });
     }
 
-    // ── 3. Buscar dados do saque ──────────────────────────────
+    // ── 3. Buscar dados do saque (pending ou processing para retry) ──
     const { data: rows, error: listErr } = await adminSupabase.rpc(
-      'admin_list_player_withdrawals',
-      { p_status: null }, // busca todos para permitir retry de 'processing'
+      'admin_list_affiliate_withdrawals',
+      { p_status: null }, // busca todos para permitir retry
     );
     if (listErr) {
       return res.status(400).json({ error: listErr.message });
@@ -58,20 +58,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ── 5. Chamar OramaPay pix-out ────────────────────────────
-    const credentials = Buffer.from(`${gateway.api_key}:${gateway.public_key}`).toString('base64');
+    const credentials    = Buffer.from(`${gateway.api_key}:${gateway.public_key}`).toString('base64');
+    const amountCentavos = Number(wd.amount) * 100;
 
-    // net_amount em coins = reais; converter para centavos
-    const amountCentavos = wd.net_amount * 100;
+    // Se o perfil não tem CPF e a chave PIX é CPF, usa a própria chave como documento
+    let destinationDoc = String(wd.destination_doc ?? '').replace(/\D/g, '');
+    if (!destinationDoc && wd.pix_key_type === 'CPF') {
+      destinationDoc = String(wd.pix_key).replace(/\D/g, '');
+    }
 
-    const payload = {
-      amount:              amountCentavos,
-      pixKey:              wd.pix_key,
-      pixKeyType:          wd.pix_key_type,   // CPF | CNPJ | EMAIL | PHONE | EVP
-      destinationName:     wd.destination_name,
-      destinationDocument: wd.destination_doc.replace(/\D/g, ''),
-      externalRef:         wd.external_ref,
-      postbackUrl:         WEBHOOK_URL,
+    const payload: Record<string, any> = {
+      amount:      amountCentavos,
+      pixKey:      wd.pix_key,
+      pixKeyType:  wd.pix_key_type,
+      destinationName: wd.destination_name || wd.affiliate_name,
+      externalRef: wd.external_ref,
+      postbackUrl: WEBHOOK_URL,
     };
+
+    // OramaPay só exige document para chaves CPF/CNPJ
+    if (destinationDoc) {
+      payload.destinationDocument = destinationDoc;
+    }
 
     const oramaRes = await fetch(ORAMA_URL, {
       method: 'POST',
@@ -92,22 +100,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── 6. Atualiza status para "processing" ──────────────────
     const { error: updateErr } = await adminSupabase.rpc(
-      'admin_set_withdrawal_processing',
+      'admin_set_affiliate_withdrawal_processing',
       { p_withdrawal_id: withdrawalId, p_orama_id: oramaData.id ?? '' },
     );
     if (updateErr) {
-      console.error('[pix-out] falha ao atualizar status:', updateErr.message);
+      console.error('[pix-out-affiliate] falha ao atualizar status:', updateErr.message);
     }
 
     return res.status(200).json({
-      success:   true,
-      oramaId:   oramaData.id,
-      status:    oramaData.status,
-      netAmount: wd.net_amount,
+      success:  true,
+      oramaId:  oramaData.id,
+      status:   oramaData.status,
+      amount:   wd.amount,
     });
 
   } catch (err: any) {
-    console.error('[pix-out] erro:', err);
+    console.error('[pix-out-affiliate] erro:', err);
     return res.status(500).json({ error: err?.message ?? 'Erro interno.' });
   }
 }

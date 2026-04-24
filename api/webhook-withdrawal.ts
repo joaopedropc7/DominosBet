@@ -23,19 +23,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const e2eId       = data.pixEnd2EndId ?? data.pix?.end2EndId ?? '';
     const paidAt      = data.paidAt     ?? new Date().toISOString();
 
-    // Ignora eventos que não são de saque (saques começam com "wd-")
-    if (!externalRef || !String(externalRef).startsWith('wd-')) {
+    const ref = String(externalRef ?? '');
+
+    // Ignora eventos que não são de saque
+    if (!ref.startsWith('wd-') && !ref.startsWith('awd-')) {
       return res.status(200).json({ received: true });
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    const { error } = await supabase.rpc('confirm_player_withdrawal', {
-      p_external_ref: externalRef,
-      p_orama_id:     oramaId ?? '',
-      p_e2e_id:       e2eId,
-      p_paid_at:      paidAt,
-    });
+    let error: any;
+
+    if (ref.startsWith('awd-')) {
+      // Saque de afiliado
+      ({ error } = await supabase.rpc('confirm_affiliate_withdrawal', {
+        p_external_ref: ref,
+        p_orama_id:     oramaId ?? '',
+        p_paid_at:      paidAt,
+      }));
+    } else {
+      // Saque de jogador
+      ({ error } = await supabase.rpc('confirm_player_withdrawal', {
+        p_external_ref: ref,
+        p_orama_id:     oramaId ?? '',
+        p_e2e_id:       e2eId,
+        p_paid_at:      paidAt,
+      }));
+    }
 
     if (error) {
       console.error('[webhook-withdrawal] falhou:', error.message);

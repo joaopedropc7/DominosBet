@@ -230,8 +230,8 @@ export function AdminSaquesJogadoresView() {
                   <Text style={styles.cardNote}>Obs: {wd.admin_notes}</Text>
                 ) : null}
 
-                {/* Actions */}
-                {wd.status === 'pending' && (
+                {/* Actions — pending: approve | processing: retry */}
+                {(wd.status === 'pending' || wd.status === 'processing') && (
                   <View style={styles.actions}>
                     <Pressable
                       onPress={() => handleApprove(wd)}
@@ -244,8 +244,14 @@ export function AdminSaquesJogadoresView() {
                       {isActing
                         ? <ActivityIndicator size="small" color="#fff" />
                         : <>
-                            <MaterialCommunityIcons name="check" size={16} color="#fff" />
-                            <Text style={styles.approveBtnText}>Aprovar e Enviar PIX</Text>
+                            <MaterialCommunityIcons
+                              name={wd.status === 'processing' ? 'refresh' : 'check'}
+                              size={16}
+                              color="#fff"
+                            />
+                            <Text style={styles.approveBtnText}>
+                              {wd.status === 'processing' ? 'Retentar PIX' : 'Aprovar e Enviar PIX'}
+                            </Text>
                           </>
                       }
                     </Pressable>
