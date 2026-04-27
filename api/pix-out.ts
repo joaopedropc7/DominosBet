@@ -7,6 +7,24 @@ const SUPABASE_URL   = 'https://jqrehnvxoxsykchtxguv.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxcmVobnZ4b3hzeWtjaHR4Z3V2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMjgxMTcsImV4cCI6MjA5MDkwNDExN30.2I_6o3dmxqujRotZS8NtZwDLpkeGTXJyEFpKIq6hqO8';
 const WEBHOOK_URL    = 'https://www.dominosbet.com.br/api/webhook-withdrawal';
 
+const PIX_KEY_TYPE_MAP: Record<string, string> = {
+  'telefone':  'PHONE',
+  'celular':   'PHONE',
+  'phone':     'PHONE',
+  'cpf':       'CPF',
+  'cnpj':      'CNPJ',
+  'email':     'EMAIL',
+  'e-mail':    'EMAIL',
+  'aleatoria': 'RANDOM',
+  'aleatória': 'RANDOM',
+  'evp':       'RANDOM',
+  'random':    'RANDOM',
+};
+
+function normalizePixKeyType(raw: string): string {
+  return PIX_KEY_TYPE_MAP[String(raw).toLowerCase().trim()] ?? String(raw).toUpperCase().trim();
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed.' });
@@ -62,7 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const payload = {
       amount:              amountCentavos,
       pixKey:              wd.pix_key,
-      pixKeyType:          wd.pix_key_type,   // CPF | CNPJ | EMAIL | PHONE | EVP
+      pixKeyType:          normalizePixKeyType(wd.pix_key_type),
       destinationName:     wd.destination_name,
       destinationDocument: wd.destination_doc.replace(/\D/g, ''),
       externalRef:         wd.external_ref,

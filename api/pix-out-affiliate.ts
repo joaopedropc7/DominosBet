@@ -7,6 +7,25 @@ const SUPABASE_URL      = 'https://jqrehnvxoxsykchtxguv.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpxcmVobnZ4b3hzeWtjaHR4Z3V2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMjgxMTcsImV4cCI6MjA5MDkwNDExN30.2I_6o3dmxqujRotZS8NtZwDLpkeGTXJyEFpKIq6hqO8';
 const WEBHOOK_URL       = 'https://www.dominosbet.com.br/api/webhook-withdrawal';
 
+const PIX_KEY_TYPE_MAP: Record<string, string> = {
+  // Português → OramaPay enum
+  'telefone':  'PHONE',
+  'celular':   'PHONE',
+  'phone':     'PHONE',
+  'cpf':       'CPF',
+  'cnpj':      'CNPJ',
+  'email':     'EMAIL',
+  'e-mail':    'EMAIL',
+  'aleatoria': 'RANDOM',
+  'aleatória': 'RANDOM',
+  'evp':       'RANDOM',
+  'random':    'RANDOM',
+};
+
+function normalizePixKeyType(raw: string): string {
+  return PIX_KEY_TYPE_MAP[String(raw).toLowerCase().trim()] ?? String(raw).toUpperCase().trim();
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed.' });
@@ -57,16 +76,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const credentials    = Buffer.from(`${gateway.api_key}:${gateway.public_key}`).toString('base64');
     const amountCentavos = Number(wd.amount) * 100;
 
+    const pixKeyType = normalizePixKeyType(wd.pix_key_type);
+
     // Se o perfil não tem CPF e a chave PIX é CPF, usa a própria chave como documento
     let destinationDoc = String(wd.destination_doc ?? '').replace(/\D/g, '');
-    if (!destinationDoc && wd.pix_key_type === 'CPF') {
+    if (!destinationDoc && pixKeyType === 'CPF') {
       destinationDoc = String(wd.pix_key).replace(/\D/g, '');
     }
 
     const payload: Record<string, any> = {
       amount:      amountCentavos,
       pixKey:      wd.pix_key,
-      pixKeyType:  wd.pix_key_type,
+      pixKeyType,
       destinationName: wd.destination_name || wd.affiliate_name,
       externalRef: wd.external_ref,
       postbackUrl: WEBHOOK_URL,
