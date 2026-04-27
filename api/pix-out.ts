@@ -19,11 +19,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Não autenticado.' });
     }
 
+    const token = authHeader.replace('Bearer ', '');
+
     const adminSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const { data: { user }, error: authErr } = await adminSupabase.auth.getUser();
+    const { data: { user }, error: authErr } = await adminSupabase.auth.getUser(token);
     if (authErr || !user) {
       return res.status(401).json({ error: 'Não autenticado.' });
     }
