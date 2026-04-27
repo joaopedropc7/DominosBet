@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { supabase } from '@/services/supabase';
 import { theme } from '@/theme';
@@ -34,6 +34,7 @@ export function AffiliateCarteiraView() {
   const [settings, setSettings]       = useState<AffiliateSettings>({ aff_min_withdrawal: 50, aff_max_withdrawal: 10000, aff_daily_withdrawals: 1 });
   const [loading, setLoading]         = useState(true);
   const [requesting, setRequesting]   = useState(false);
+  const [amountInput, setAmountInput] = useState('');
   const [error, setError]             = useState('');
   const [success, setSuccess]         = useState('');
 
@@ -50,9 +51,24 @@ export function AffiliateCarteiraView() {
 
   async function handleRequestWithdrawal() {
     if (!affiliate) return;
-    const minWd = Number(settings.aff_min_withdrawal);
-    if (affiliate.balance < minWd) {
-      setError(`Saldo mínimo para saque é R$ ${minWd.toFixed(2).replace('.', ',')}`);
+    const minWd  = Number(settings.aff_min_withdrawal);
+    const maxWd  = Number(settings.aff_max_withdrawal);
+    const amount = parseFloat(amountInput.replace(',', '.'));
+
+    if (!amountInput || isNaN(amount) || amount <= 0) {
+      setError('Informe o valor do saque.');
+      return;
+    }
+    if (amount < minWd) {
+      setError(`Valor mínimo para saque é R$ ${minWd.toFixed(2).replace('.', ',')}`);
+      return;
+    }
+    if (amount > maxWd) {
+      setError(`Valor máximo para saque é R$ ${maxWd.toFixed(2).replace('.', ',')}`);
+      return;
+    }
+    if (amount > affiliate.balance) {
+      setError('Valor maior que o saldo disponível.');
       return;
     }
     if (!affiliate.pix_key) {
@@ -63,13 +79,14 @@ export function AffiliateCarteiraView() {
     setSuccess('');
     setRequesting(true);
     const { error: rpcError } = await supabase.rpc('request_affiliate_withdrawal', {
-      p_amount: affiliate.balance,
+      p_amount: amount,
     });
     setRequesting(false);
     if (rpcError) {
       setError(rpcError.message);
     } else {
       setSuccess('Saque solicitado com sucesso! Nossa equipe processará em até 48h.');
+      setAmountInput('');
       refreshAffiliate();
       supabase.rpc('get_affiliate_withdrawals').then(({ data }) => {
         if (data) setWithdrawals(data as Withdrawal[]);
@@ -125,14 +142,38 @@ export function AffiliateCarteiraView() {
 
       {/* Withdraw action */}
       <View style={styles.actionCard}>
-        <View style={styles.actionCardLeft}>
-          <Text style={styles.actionCardTitle}>Solicitar Saque</Text>
-          <Text style={styles.actionCardBody}>
-            Saque mínimo: R$ {Number(settings.aff_min_withdrawal).toFixed(2).replace('.', ',')} · Processamento em até 48h via PIX
-          </Text>
-          {error ? <Text style={styles.errorText}>{error}</Text> : null}
-          {success ? <Text style={styles.successText}>{success}</Text> : null}
+        <Text style={styles.actionCardTitle}>Solicitar Saque</Text>
+        <Text style={styles.actionCardBody}>
+          Mínimo: R$ {Number(settings.aff_min_withdrawal).toFixed(2).replace('.', ',')} · Máximo: R$ {Number(settings.aff_max_withdrawal).toFixed(2).replace('.', ',')} · Processamento em até 48h via PIX
+        </Text>
+
+        <View style={styles.amountRow}>
+          <View style={styles.amountInputWrap}>
+            <Text style={styles.amountPrefix}>R$</Text>
+            <TextInput
+              style={styles.amountInput}
+              placeholder="0,00"
+              placeholderTextColor={theme.colors.textFaint}
+              keyboardType="decimal-pad"
+              value={amountInput}
+              onChangeText={v => { setAmountInput(v); setError(''); setSuccess(''); }}
+            />
+          </View>
+          <TouchableOpacity
+            style={styles.maxBtn}
+            onPress={() => {
+              setAmountInput(affiliate ? affiliate.balance.toFixed(2).replace('.', ',') : '');
+              setError('');
+              setSuccess('');
+            }}
+          >
+            <Text style={styles.maxBtnText}>Máximo</Text>
+          </TouchableOpacity>
         </View>
+
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        {success ? <Text style={styles.successText}>{success}</Text> : null}
+
         <TouchableOpacity
           style={[styles.withdrawBtn, requesting && { opacity: 0.6 }]}
           onPress={handleRequestWithdrawal}
@@ -140,7 +181,7 @@ export function AffiliateCarteiraView() {
         >
           {requesting
             ? <ActivityIndicator size="small" color="#000" />
-            : <Text style={styles.withdrawBtnText}>Sacar agora</Text>
+            : <Text style={styles.withdrawBtnText}>Solicitar saque</Text>
           }
         </TouchableOpacity>
       </View>
@@ -228,26 +269,65 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.outline,
     padding: theme.spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
-  actionCardLeft: { flex: 1, gap: 4 },
   actionCardTitle: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 15 },
   actionCardBody: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 12 },
-  errorText: { color: '#EF4444', fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 12, marginTop: 4 },
-  successText: { color: '#10B981', fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 12, marginTop: 4 },
+
+  amountRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  amountInputWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceInset,
+    borderWidth: 1,
+    borderColor: theme.colors.outline,
+    borderRadius: theme.radius.md,
+    paddingHorizontal: theme.spacing.sm,
+  },
+  amountPrefix: {
+    color: theme.colors.textMuted,
+    fontFamily: theme.typography.fontFamily.bodyBold,
+    fontSize: 14,
+    marginRight: 4,
+  },
+  amountInput: {
+    flex: 1,
+    color: theme.colors.text,
+    fontFamily: theme.typography.fontFamily.bodyMedium,
+    fontSize: 16,
+    paddingVertical: 10,
+  },
+  maxBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+  },
+  maxBtnText: {
+    color: theme.colors.primary,
+    fontFamily: theme.typography.fontFamily.bodyBold,
+    fontSize: 13,
+  },
+
+  errorText: { color: '#EF4444', fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 12 },
+  successText: { color: '#10B981', fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 12 },
 
   withdrawBtn: {
     backgroundColor: theme.colors.primary,
     borderRadius: theme.radius.pill,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
+    paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 110,
+    marginTop: 4,
   },
-  withdrawBtnText: { color: '#241A00', fontFamily: theme.typography.fontFamily.display, fontSize: 13 },
+  withdrawBtnText: { color: '#241A00', fontFamily: theme.typography.fontFamily.display, fontSize: 14 },
 
   sectionTitle: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 15 },
 
