@@ -101,7 +101,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ── 6. Atualiza status para "processing" ──────────────────
     const { error: updateErr } = await adminSupabase.rpc(
       'admin_set_affiliate_withdrawal_processing',
-      { p_withdrawal_id: withdrawalId, p_orama_id: oramaData.id ?? '' },
+      {
+        p_withdrawal_id:  withdrawalId,
+        p_orama_id:       oramaData.id ?? '',
+        p_orama_response: oramaData,
+      },
     );
     if (updateErr) {
       console.error('[pix-out-affiliate] falha ao atualizar status:', updateErr.message);
