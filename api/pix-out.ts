@@ -90,9 +90,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const oramaRes = await fetch(ORAMA_URL, {
       method: 'POST',
       headers: {
-        'User-Agent':    USER_AGENT,
-        'Content-Type':  'application/json',
-        'Authorization': `Basic ${credentials}`,
+        'User-Agent':       USER_AGENT,
+        'Content-Type':     'application/json',
+        'Authorization':    `Basic ${credentials}`,
+        'Idempotency-Key':  wd.external_ref,
       },
       body: JSON.stringify(payload),
     });
