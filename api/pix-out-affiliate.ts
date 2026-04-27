@@ -85,18 +85,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const payload: Record<string, any> = {
-      amount:      amountCentavos,
-      pixKey:      wd.pix_key,
+      amount:              amountCentavos,
+      pixKey:              wd.pix_key,
       pixKeyType,
-      destinationName: wd.destination_name || wd.affiliate_name,
-      externalRef: wd.external_ref,
-      postbackUrl: WEBHOOK_URL,
+      destinationName:     wd.destination_name || wd.affiliate_name,
+      destinationDocument: destinationDoc,
+      externalRef:         wd.external_ref,
+      postbackUrl:         WEBHOOK_URL,
     };
-
-    // OramaPay só exige document para chaves CPF/CNPJ
-    if (destinationDoc) {
-      payload.destinationDocument = destinationDoc;
-    }
 
     const oramaRes = await fetch(ORAMA_URL, {
       method: 'POST',
