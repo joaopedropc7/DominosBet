@@ -19,16 +19,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Não autenticado.' });
     }
 
-    const token = authHeader.replace('Bearer ', '');
-
     const adminSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
     });
-
-    const { data: { user }, error: authErr } = await adminSupabase.auth.getUser(token);
-    if (authErr || !user) {
-      return res.status(401).json({ error: 'Não autenticado.' });
-    }
 
     // ── 2. Ler body ───────────────────────────────────────────
     const { withdrawalId } = req.body as { withdrawalId: string };
@@ -37,6 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ── 3. Buscar dados do saque (pending ou processing para retry) ──
+    // (o RPC admin_list_affiliate_withdrawals já verifica is_admin internamente)
     const { data: rows, error: listErr } = await adminSupabase.rpc(
       'admin_list_affiliate_withdrawals',
       { p_status: null }, // busca todos para permitir retry

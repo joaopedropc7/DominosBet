@@ -76,12 +76,13 @@ export function AdminSaquesJogadoresView() {
   async function handleApprove(wd: Withdrawal) {
     setActionLoading(wd.id);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await supabase.auth.refreshSession();
+      const token = session?.access_token ?? '';
       const res = await fetch('/api/pix-out', {
         method: 'POST',
         headers: {
           'Content-Type':  'application/json',
-          'Authorization': `Bearer ${session?.access_token}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ withdrawalId: wd.id }),
       });
