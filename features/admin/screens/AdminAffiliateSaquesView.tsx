@@ -24,12 +24,13 @@ type Withdrawal = {
   created_at: string;
 };
 
-type StatusFilter = 'all' | 'pending' | 'processing' | 'paid' | 'rejected';
+type StatusFilter = 'all' | 'pending' | 'processing' | 'approved' | 'paid' | 'rejected';
 
 const STATUS_OPTS: { key: StatusFilter; label: string }[] = [
   { key: 'all',        label: 'Todos'       },
   { key: 'pending',    label: 'Em análise'  },
   { key: 'processing', label: 'Processando' },
+  { key: 'approved',   label: 'Aprovados'   },
   { key: 'paid',       label: 'Pagos'       },
   { key: 'rejected',   label: 'Recusados'   },
 ];
@@ -38,6 +39,7 @@ const STATUS_COLOR: Record<string, string> = {
   pending:    '#F59E0B',
   processing: '#60A5FA',
   paid:       '#10B981',
+  approved:   '#10B981',
   rejected:   '#EF4444',
 };
 
@@ -45,6 +47,7 @@ const STATUS_LABEL: Record<string, string> = {
   pending:    'Em análise',
   processing: 'Processando',
   paid:       'Pago',
+  approved:   'Aprovado',
   rejected:   'Recusado',
 };
 
@@ -54,7 +57,7 @@ const fmt = (n: number) =>
 export function AdminAffiliateSaquesView() {
   const [items,         setItems]         = useState<Withdrawal[]>([]);
   const [loading,       setLoading]       = useState(true);
-  const [filter,        setFilter]        = useState<StatusFilter>('pending');
+  const [filter,        setFilter]        = useState<StatusFilter>('all');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   // Modal de rejeição
@@ -235,7 +238,7 @@ export function AdminAffiliateSaquesView() {
                 ) : null}
 
                 {/* Rollback — TEMPORÁRIO, apenas para testes */}
-                {wd.status === 'paid' && (
+                {(wd.status === 'paid' || wd.status === 'approved') && (
                   <Pressable
                     style={({ pressed }) => [styles.rollbackBtn, pressed && { opacity: 0.7 }]}
                     onPress={async () => {

@@ -55,7 +55,7 @@ const STATUS_LABEL: Record<string, string> = {
 export function AdminSaquesJogadoresView() {
   const [items,        setItems]        = useState<Withdrawal[]>([]);
   const [loading,      setLoading]      = useState(true);
-  const [filter,       setFilter]       = useState<StatusFilter>('pending');
+  const [filter,       setFilter]       = useState<StatusFilter>('all');
   const [actionLoading,setActionLoading]= useState<string | null>(null);
 
   // Modal de rejeição
