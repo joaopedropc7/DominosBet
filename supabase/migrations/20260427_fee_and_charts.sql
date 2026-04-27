@@ -106,6 +106,8 @@ GRANT EXECUTE ON FUNCTION public.request_affiliate_withdrawal(numeric) TO authen
 -- 4. admin_list_affiliate_withdrawals — inclui fee_amount / net_amount
 -- ═══════════════════════════════════════════════════════════════
 
+DROP FUNCTION IF EXISTS public.admin_list_affiliate_withdrawals(text);
+
 CREATE OR REPLACE FUNCTION public.admin_list_affiliate_withdrawals(
   p_status text DEFAULT NULL
 )
@@ -154,6 +156,9 @@ GRANT EXECUTE ON FUNCTION public.admin_list_affiliate_withdrawals(text) TO authe
 -- ═══════════════════════════════════════════════════════════════
 -- 5. admin_update_site_settings — inclui p_aff_withdrawal_fee
 -- ═══════════════════════════════════════════════════════════════
+
+-- Remove a versão antiga de 18 parâmetros (sem p_aff_withdrawal_fee)
+DROP FUNCTION IF EXISTS public.admin_update_site_settings(text,text,text,numeric,numeric,integer,integer,integer,numeric,numeric,integer,numeric,numeric,integer,numeric,numeric,integer,integer);
 
 CREATE OR REPLACE FUNCTION public.admin_update_site_settings(
   p_seo_title                  text    DEFAULT NULL,
@@ -312,8 +317,9 @@ RETURNS TABLE (
   withdrawals  numeric
 )
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE v_uid uuid := auth.uid();
-DECLARE v_aff_id uuid;
+DECLARE
+  v_uid    uuid := auth.uid();
+  v_aff_id uuid;
 BEGIN
   SELECT id INTO v_aff_id FROM public.affiliates WHERE user_id = v_uid LIMIT 1;
   IF NOT FOUND THEN RAISE EXCEPTION 'Afiliado não encontrado.'; END IF;
