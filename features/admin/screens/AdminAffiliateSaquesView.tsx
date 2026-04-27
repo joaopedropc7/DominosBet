@@ -238,31 +238,6 @@ export function AdminAffiliateSaquesView() {
                   </View>
                 ) : null}
 
-                {/* Rollback — TEMPORÁRIO, apenas para testes */}
-                {(wd.status === 'paid' || wd.status === 'approved') && (
-                  <Pressable
-                    style={({ pressed }) => [styles.rollbackBtn, pressed && { opacity: 0.7 }]}
-                    onPress={async () => {
-                      setActionLoading(wd.id);
-                      const { error } = await supabase.rpc('admin_rollback_affiliate_withdrawal', {
-                        p_withdrawal_id: wd.id,
-                      });
-                      setActionLoading(null);
-                      if (error) alert(`Erro: ${error.message}`);
-                      else await load();
-                    }}
-                    disabled={isLoading}
-                  >
-                    {isLoading
-                      ? <ActivityIndicator size="small" color="#8B5CF6" />
-                      : <>
-                          <MaterialCommunityIcons name="undo" size={14} color="#8B5CF6" />
-                          <Text style={styles.rollbackBtnText}>Rollback (teste)</Text>
-                        </>
-                    }
-                  </Pressable>
-                )}
-
                 {/* Actions — pending: approve + reject | processing: retry */}
                 {(wd.status === 'pending' || wd.status === 'processing') && (
                   <View style={styles.actions}>
@@ -419,13 +394,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md, paddingVertical: 8,
   },
   notesText: { color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.body, fontSize: 12 },
-
-  rollbackBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, paddingVertical: 8, borderRadius: theme.radius.md,
-    borderWidth: 1, borderColor: '#8B5CF6', borderStyle: 'dashed' as any,
-  },
-  rollbackBtnText: { color: '#8B5CF6', fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 12 },
 
   actions:    { flexDirection: 'row', gap: theme.spacing.sm },
   actionBtn: {

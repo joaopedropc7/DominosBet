@@ -231,31 +231,6 @@ export function AdminSaquesJogadoresView() {
                   <Text style={styles.cardNote}>Obs: {wd.admin_notes}</Text>
                 ) : null}
 
-                {/* Rollback — TEMPORÁRIO, apenas para testes */}
-                {wd.status === 'paid' && (
-                  <Pressable
-                    onPress={async () => {
-                      setActionLoading(wd.id);
-                      const { error } = await supabase.rpc('admin_rollback_player_withdrawal', {
-                        p_withdrawal_id: wd.id,
-                      });
-                      setActionLoading(null);
-                      if (error) alert(`Erro: ${error.message}`);
-                      else await load();
-                    }}
-                    disabled={isActing}
-                    style={({ pressed }) => [styles.rollbackBtn, pressed && { opacity: 0.7 }]}
-                  >
-                    {isActing
-                      ? <ActivityIndicator size="small" color="#8B5CF6" />
-                      : <>
-                          <MaterialCommunityIcons name="undo" size={14} color="#8B5CF6" />
-                          <Text style={styles.rollbackBtnText}>Rollback (teste)</Text>
-                        </>
-                    }
-                  </Pressable>
-                )}
-
                 {/* Actions — pending: approve | processing: retry */}
                 {(wd.status === 'pending' || wd.status === 'processing') && (
                   <View style={styles.actions}>
@@ -408,13 +383,6 @@ const styles = StyleSheet.create({
   approveBtnText: { color: '#fff', fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 13 },
   rejectBtn: { borderWidth: 1, borderColor: '#EF4444', paddingHorizontal: theme.spacing.lg },
   rejectBtnText: { color: '#EF4444', fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 13 },
-  rollbackBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, paddingVertical: 8, borderRadius: theme.radius.md,
-    borderWidth: 1, borderColor: '#8B5CF6', borderStyle: 'dashed' as any,
-  },
-  rollbackBtnText: { color: '#8B5CF6', fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 12 },
-
   modalOverlay: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.6)',
     alignItems: 'center', justifyContent: 'center', padding: theme.spacing.xl,
