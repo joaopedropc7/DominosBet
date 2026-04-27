@@ -102,6 +102,23 @@ function fmtMoney(n: number) {
   return `R$ ${Number(n).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
 }
 
+function escapeCsv(v: unknown): string {
+  const s = String(v ?? '').replace(/"/g, '""');
+  return `"${s}"`;
+}
+
+function downloadCsv(filename: string, rows: string[][]): void {
+  if (typeof window === 'undefined') return;
+  const csv = rows.map(r => r.map(escapeCsv).join(',')).join('\r\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ─── Main Component ───────────────────────────────────────────
 
 export function AdminTransacoesView() {
@@ -118,6 +135,9 @@ export function AdminTransacoesView() {
   const [wdStatus,       setWdStatus]       = useState<WithdrawalStatus>(null);
   const [wdKind,         setWdKind]         = useState<WithdrawalKind>(null);
   const [wdLoading,      setWdLoading]      = useState(false);
+
+  // CSV export
+  const [exporting, setExporting] = useState(false);
 
   // Load summary
   useEffect(() => {
@@ -156,6 +176,58 @@ export function AdminTransacoesView() {
     if (tab === 'withdrawals') loadWithdrawals();
   }, [tab, loadWithdrawals]);
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      if (tab === 'deposits') {
+        const { data } = await supabase.rpc('admin_list_deposits', {
+          p_status: depositStatus ?? undefined,
+          p_limit:  10000,
+          p_offset: 0,
+        });
+        const rows = data as Deposit[] ?? [];
+        downloadCsv('depositos.csv', [
+          ['ID', 'Jogador', 'Email', 'Valor (R$)', 'Status', 'OramaPay ID', 'Data'],
+          ...rows.map(d => [
+            d.id,
+            d.display_name,
+            d.email,
+            Number(d.amount_reais).toFixed(2),
+            d.status,
+            d.orama_id ?? '',
+            d.paid_at ?? d.created_at,
+          ]),
+        ]);
+      } else {
+        const { data } = await supabase.rpc('admin_list_all_withdrawals', {
+          p_status: wdStatus ?? null,
+          p_kind:   wdKind   ?? null,
+          p_limit:  10000,
+          p_offset: 0,
+        });
+        const rows = data as Withdrawal[] ?? [];
+        downloadCsv('saques.csv', [
+          ['ID', 'Tipo', 'Nome', 'Email', 'Valor (R$)', 'Líquido (R$)', 'Chave PIX', 'Tipo Chave', 'Status', 'Referência', 'Data'],
+          ...rows.map(w => [
+            w.id,
+            w.kind === 'player' ? 'Jogador' : 'Afiliado',
+            w.subject_name,
+            w.subject_email,
+            Number(w.amount).toFixed(2),
+            Number(w.net_amount).toFixed(2),
+            w.pix_key,
+            w.pix_key_type,
+            w.status,
+            w.external_ref,
+            w.created_at,
+          ]),
+        ]);
+      }
+    } finally {
+      setExporting(false);
+    }
+  }
+
   function handleRefresh() {
     supabase.rpc('admin_financial_summary').then(({ data }) => {
       if (data) setSummary(data as Summary);
@@ -169,9 +241,24 @@ export function AdminTransacoesView() {
       {/* ── Page header ─────────────────────────────── */}
       <View style={styles.pageHeader}>
         <Text style={styles.pageTitle}>Transações</Text>
-        <Pressable onPress={handleRefresh} style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.7 }]}>
-          <MaterialCommunityIcons name="refresh" size={20} color={theme.colors.textMuted} />
-        </Pressable>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Pressable
+            onPress={handleExport}
+            disabled={exporting}
+            style={({ pressed }) => [styles.iconBtn, styles.exportBtn, pressed && { opacity: 0.7 }, exporting && { opacity: 0.5 }]}
+          >
+            {exporting
+              ? <ActivityIndicator size="small" color={theme.colors.primary} />
+              : <>
+                  <MaterialCommunityIcons name="download-outline" size={16} color={theme.colors.primary} />
+                  <Text style={styles.exportBtnText}>CSV</Text>
+                </>
+            }
+          </Pressable>
+          <Pressable onPress={handleRefresh} style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.7 }]}>
+            <MaterialCommunityIcons name="refresh" size={20} color={theme.colors.textMuted} />
+          </Pressable>
+        </View>
       </View>
 
       {/* ── Summary cards ───────────────────────────── */}
@@ -400,6 +487,12 @@ const styles = StyleSheet.create({
   },
   pageTitle: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.display, fontSize: 26 },
   iconBtn: { padding: theme.spacing.sm, borderRadius: theme.radius.md, backgroundColor: theme.colors.surface },
+  exportBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: theme.spacing.md,
+    borderWidth: 1, borderColor: theme.colors.primary,
+  },
+  exportBtnText: { color: theme.colors.primary, fontFamily: theme.typography.fontFamily.bodyBold, fontSize: 12 },
 
   // Summary
   summaryRow: {

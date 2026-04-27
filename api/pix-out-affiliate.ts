@@ -74,7 +74,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── 5. Chamar OramaPay pix-out ────────────────────────────
     const credentials    = Buffer.from(`${gateway.api_key}:${gateway.public_key}`).toString('base64');
-    const amountCentavos = Number(wd.amount) * 100;
+    // net_amount já desconta a taxa; fallback para amount em saques antigos sem fee
+    const transferAmount = Number(wd.net_amount ?? wd.amount);
+    const amountCentavos = Math.round(transferAmount * 100);
 
     const pixKeyType = normalizePixKeyType(wd.pix_key_type);
 
@@ -138,10 +140,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     return res.status(200).json({
-      success:  true,
-      oramaId:  oramaData.id,
-      status:   oramaData.status,
-      amount:   wd.amount,
+      success:    true,
+      oramaId:    oramaData.id,
+      status:     oramaData.status,
+      amount:     wd.amount,
+      net_amount: wd.net_amount ?? wd.amount,
     });
 
   } catch (err: any) {

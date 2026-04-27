@@ -106,6 +106,13 @@ export function SaqueView() {
     setErr('');
     setSuccess('');
     if (!parsedAmount || parsedAmount <= 0) { setErr('Informe um valor.'); return; }
+    if (settings && parsedAmount < settings.player_min_withdrawal) {
+      setErr(`Valor mínimo de saque: R$ ${settings.player_min_withdrawal}`); return;
+    }
+    if (settings && parsedAmount > settings.player_max_withdrawal) {
+      setErr(`Valor máximo de saque: R$ ${settings.player_max_withdrawal.toLocaleString('pt-BR')}`); return;
+    }
+    if (parsedAmount > balance) { setErr('Saldo insuficiente.'); return; }
     if (!pixKey.trim())                      { setErr('Informe a chave PIX.'); return; }
     if (!destName.trim())                    { setErr('Informe o nome do titular.'); return; }
     if (!destDoc.trim())                     { setErr('Informe o CPF/CNPJ do titular.'); return; }
@@ -199,6 +206,12 @@ export function SaqueView() {
                 placeholderTextColor={theme.colors.textFaint}
                 keyboardType="number-pad"
               />
+              <Pressable
+                onPress={() => { setAmount(String(balance)); setErr(''); }}
+                style={({ pressed }) => [styles.maxBtn, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.maxBtnText}>Máximo</Text>
+              </Pressable>
             </View>
             {parsedAmount > 0 && feePercent > 0 && (
               <Text style={styles.netAmountHint}>

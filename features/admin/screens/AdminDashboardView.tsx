@@ -4,21 +4,130 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, T
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { adminGetDashboard } from '@/services/admin';
+import { supabase } from '@/services/supabase';
 import { theme } from '@/theme';
 import type { AdminDashboardData } from '@/types/database';
 import { formatCoins } from '@/utils/format';
 
+// ─── Types ────────────────────────────────────────────────────
+
+type ChartDay = {
+  day: string;               // 'YYYY-MM-DD'
+  deposits_total: number;
+  deposits_count: number;
+  player_wd_total: number;
+  affiliate_wd_total: number;
+  net_revenue: number;
+};
+
+// ─── Helpers ──────────────────────────────────────────────────
+
+function fmtMoney(n: number) {
+  return `R$ ${Number(n).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`;
+}
+
+function fmtDayLabel(iso: string) {
+  const d = new Date(iso + 'T00:00:00');
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+// ─── Bar chart component ──────────────────────────────────────
+
+type BarSeries = { color: string; values: number[] };
+
+function BarChart({
+  series,
+  labels,
+  height = 120,
+}: {
+  series: BarSeries[];
+  labels: string[];
+  height?: number;
+}) {
+  const allVals = series.flatMap(s => s.values);
+  const maxVal  = Math.max(...allVals, 1);
+
+  // Show every Nth label to avoid crowding
+  const step = labels.length > 14 ? Math.ceil(labels.length / 7) : 1;
+
+  return (
+    <View style={{ gap: 6 }}>
+      <View style={{ height, flexDirection: 'row', alignItems: 'flex-end', gap: 2 }}>
+        {labels.map((_, i) => (
+          <View key={i} style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-end', gap: 1 }}>
+            {series.map((s, si) => {
+              const pct = maxVal > 0 ? (s.values[i] ?? 0) / maxVal : 0;
+              return (
+                <View
+                  key={si}
+                  style={{
+                    flex: 1,
+                    height: Math.max(pct * height, s.values[i] > 0 ? 2 : 0),
+                    backgroundColor: s.color,
+                    borderRadius: 2,
+                    opacity: 0.85,
+                  }}
+                />
+              );
+            })}
+          </View>
+        ))}
+      </View>
+      {/* X-axis labels */}
+      <View style={{ flexDirection: 'row' }}>
+        {labels.map((l, i) => (
+          <View key={i} style={{ flex: 1, alignItems: 'center' }}>
+            {i % step === 0 ? (
+              <Text style={chartStyles.axisLabel}>{l}</Text>
+            ) : null}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const chartStyles = StyleSheet.create({
+  axisLabel: {
+    color: theme.colors.textFaint,
+    fontFamily: theme.typography.fontFamily.body,
+    fontSize: 9,
+  },
+});
+
+// ─── Legend pill ──────────────────────────────────────────────
+
+function Legend({ color, label }: { color: string; label: string }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+      <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: color }} />
+      <Text style={{ color: theme.colors.textFaint, fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 11 }}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────
+
 export function AdminDashboardView() {
-  const [data, setData] = useState<AdminDashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
+  const [data,      setData]      = useState<AdminDashboardData | null>(null);
+  const [chart,     setChart]     = useState<ChartDay[]>([]);
+  const [days,      setDays]      = useState(30);
+  const [loading,   setLoading]   = useState(true);
+  const [refreshing,setRefreshing]= useState(false);
+  const [error,     setError]     = useState('');
 
   async function load(silent = false) {
     if (!silent) setLoading(true);
     setError('');
     try {
-      setData(await adminGetDashboard());
+      const [dashRes, chartRes] = await Promise.all([
+        adminGetDashboard(),
+        supabase.rpc('admin_chart_data', { p_days: days }),
+      ]);
+      setData(dashRes);
+      if (chartRes.data) setChart(chartRes.data as ChartDay[]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao carregar dados.');
     } finally {
@@ -27,7 +136,17 @@ export function AdminDashboardView() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [days]);
+
+  // Derived chart data
+  const chartLabels   = chart.map(d => fmtDayLabel(d.day));
+  const depositValues = chart.map(d => Number(d.deposits_total));
+  const playerWd      = chart.map(d => Number(d.player_wd_total));
+  const affiliateWd   = chart.map(d => Number(d.affiliate_wd_total));
+  const netValues     = chart.map(d => Number(d.net_revenue));
+  const totalDeposits = depositValues.reduce((a, b) => a + b, 0);
+  const totalWd       = chart.reduce((a, d) => a + Number(d.player_wd_total) + Number(d.affiliate_wd_total), 0);
+  const totalNet      = netValues.reduce((a, b) => a + b, 0);
 
   return (
     <ScrollView
@@ -65,20 +184,106 @@ export function AdminDashboardView() {
         <>
           {/* KPI row */}
           <View style={styles.kpiRow}>
-            <KpiCard icon="account-group"  label="Usuários totais"     value={String(data.total_users)}         accent />
-            <KpiCard icon="gamepad-variant" label="Partidas jogadas"    value={String(data.total_matches)}               />
+            <KpiCard icon="account-group"   label="Usuários totais"      value={String(data.total_users)}        accent />
+            <KpiCard icon="gamepad-variant" label="Partidas jogadas"     value={String(data.total_matches)}              />
             <KpiCard icon="cash-multiple"   label="Moedas em circulação" value={formatCoins(data.total_coins)}   accent />
-            <KpiCard icon="link-variant"    label="Usos de afiliados"   value={String(data.affiliate_uses)}              />
+            <KpiCard icon="link-variant"    label="Usos de afiliados"    value={String(data.affiliate_uses)}             />
           </View>
 
-          {/* Secondary row */}
+          {/* New users row */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Novos cadastros</Text>
             <View style={styles.kpiRow}>
-              <KpiCard icon="account-plus"   label="Hoje"         value={String(data.new_users_today)} />
-              <KpiCard icon="calendar-week"  label="Esta semana"  value={String(data.new_users_week)}  />
-              <KpiCard icon="link-box"       label="Links ativos" value={String(data.total_affiliates)}/>
+              <KpiCard icon="account-plus"  label="Hoje"         value={String(data.new_users_today)} />
+              <KpiCard icon="calendar-week" label="Esta semana"  value={String(data.new_users_week)}  />
+              <KpiCard icon="link-box"      label="Links ativos" value={String(data.total_affiliates)}/>
             </View>
+          </View>
+
+          {/* Period selector */}
+          <View style={styles.section}>
+            <View style={styles.chartHeader}>
+              <Text style={styles.sectionTitle}>Financeiro</Text>
+              <View style={{ flexDirection: 'row', gap: 4 }}>
+                {([7, 14, 30] as const).map(d => (
+                  <Pressable
+                    key={d}
+                    onPress={() => setDays(d)}
+                    style={[styles.periodChip, days === d && styles.periodChipActive]}
+                  >
+                    <Text style={[styles.periodChipText, days === d && styles.periodChipTextActive]}>
+                      {d}d
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            {/* Summary numbers */}
+            <View style={styles.kpiRow}>
+              <View style={styles.miniCard}>
+                <Text style={styles.miniLabel}>Depósitos</Text>
+                <Text style={[styles.miniValue, { color: '#22C55E' }]}>{fmtMoney(totalDeposits)}</Text>
+              </View>
+              <View style={styles.miniCard}>
+                <Text style={styles.miniLabel}>Saques</Text>
+                <Text style={[styles.miniValue, { color: '#EF4444' }]}>{fmtMoney(totalWd)}</Text>
+              </View>
+              <View style={styles.miniCard}>
+                <Text style={styles.miniLabel}>Líquido</Text>
+                <Text style={[styles.miniValue, { color: totalNet >= 0 ? '#22C55E' : '#EF4444' }]}>
+                  {fmtMoney(totalNet)}
+                </Text>
+              </View>
+            </View>
+
+            {/* Deposits vs Withdrawals chart */}
+            {chart.length > 0 ? (
+              <>
+                <View style={styles.chartCard}>
+                  <Text style={styles.chartCardTitle}>Depósitos × Saques (R$)</Text>
+                  <BarChart
+                    series={[
+                      { color: '#22C55E', values: depositValues },
+                      { color: '#EF4444', values: playerWd.map((v, i) => v + affiliateWd[i]) },
+                    ]}
+                    labels={chartLabels}
+                  />
+                  <View style={{ flexDirection: 'row', gap: 12, marginTop: 4 }}>
+                    <Legend color="#22C55E" label="Depósitos" />
+                    <Legend color="#EF4444" label="Saques" />
+                  </View>
+                </View>
+
+                {/* Net revenue chart */}
+                <View style={styles.chartCard}>
+                  <Text style={styles.chartCardTitle}>Receita Líquida (R$)</Text>
+                  <BarChart
+                    series={[{ color: theme.colors.primary, values: netValues }]}
+                    labels={chartLabels}
+                  />
+                  <View style={{ flexDirection: 'row', gap: 12, marginTop: 4 }}>
+                    <Legend color={theme.colors.primary} label="Receita líquida" />
+                  </View>
+                </View>
+
+                {/* Breakdown chart */}
+                <View style={styles.chartCard}>
+                  <Text style={styles.chartCardTitle}>Saques por tipo (R$)</Text>
+                  <BarChart
+                    series={[
+                      { color: '#60A5FA', values: playerWd },
+                      { color: '#A78BFA', values: affiliateWd },
+                    ]}
+                    labels={chartLabels}
+                  />
+                  <View style={{ flexDirection: 'row', gap: 12, marginTop: 4 }}>
+                    <Legend color="#60A5FA" label="Jogadores" />
+                    <Legend color="#A78BFA" label="Afiliados" />
+                  </View>
+                </View>
+              </>
+            ) : null}
           </View>
 
           {/* Quick access */}
@@ -229,6 +434,65 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textTransform: 'uppercase',
     letterSpacing: 1.2,
+  },
+  chartHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  periodChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    borderColor: theme.colors.outline,
+  },
+  periodChipActive: {
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: theme.colors.primary,
+  },
+  periodChipText: {
+    color: theme.colors.textFaint,
+    fontFamily: theme.typography.fontFamily.bodyMedium,
+    fontSize: 11,
+  },
+  periodChipTextActive: {
+    color: theme.colors.primary,
+    fontFamily: theme.typography.fontFamily.bodySemiBold,
+  },
+  miniCard: {
+    flex: 1,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.outline,
+    padding: theme.spacing.sm,
+    gap: 3,
+    alignItems: 'center',
+  },
+  miniLabel: {
+    color: theme.colors.textFaint,
+    fontFamily: theme.typography.fontFamily.bodyBold,
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  miniValue: {
+    fontFamily: theme.typography.fontFamily.displayMedium,
+    fontSize: 15,
+  },
+  chartCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.outline,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  chartCardTitle: {
+    color: theme.colors.text,
+    fontFamily: theme.typography.fontFamily.bodyBold,
+    fontSize: 13,
   },
   quickGrid: {
     gap: theme.spacing.sm,

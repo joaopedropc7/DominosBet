@@ -20,6 +20,7 @@ type SiteSettings = {
   aff_min_withdrawal: number;
   aff_max_withdrawal: number;
   aff_daily_withdrawals: number;
+  aff_withdrawal_fee: number;
   player_min_deposit: number;
   player_min_withdrawal: number;
   player_rollover: number;
@@ -98,6 +99,7 @@ export function AdminConfiguracoesView() {
   const [affMinWithdrawal,    setAffMinWithdrawal]    = useState('');
   const [affMaxWithdrawal,    setAffMaxWithdrawal]    = useState('');
   const [affDailyWithdrawals, setAffDailyWithdrawals] = useState('');
+  const [affWithdrawalFee,    setAffWithdrawalFee]    = useState('');
 
   // Financeiro jogadores
   const [playerMinDeposit,       setPlayerMinDeposit]       = useState('');
@@ -124,6 +126,7 @@ export function AdminConfiguracoesView() {
         setAffMinWithdrawal(String(s.aff_min_withdrawal ?? '50'));
         setAffMaxWithdrawal(String(s.aff_max_withdrawal ?? '10000'));
         setAffDailyWithdrawals(String(s.aff_daily_withdrawals ?? '1'));
+        setAffWithdrawalFee(String(s.aff_withdrawal_fee ?? '0'));
         setPlayerMinDeposit(String(s.player_min_deposit ?? '1'));
         setPlayerMinWithdrawal(String(s.player_min_withdrawal ?? '20'));
         setPlayerRollover(String(s.player_rollover ?? '1'));
@@ -158,6 +161,7 @@ export function AdminConfiguracoesView() {
       p_aff_min_withdrawal:         n(affMinWithdrawal),
       p_aff_max_withdrawal:         n(affMaxWithdrawal),
       p_aff_daily_withdrawals:      ni(affDailyWithdrawals),
+      p_aff_withdrawal_fee:         n(affWithdrawalFee),
       p_player_min_deposit:         n(playerMinDeposit),
       p_player_min_withdrawal:      n(playerMinWithdrawal),
       p_player_rollover:            ni(playerRollover),
@@ -184,6 +188,7 @@ export function AdminConfiguracoesView() {
         setAffMinWithdrawal(String(s.aff_min_withdrawal));
         setAffMaxWithdrawal(String(s.aff_max_withdrawal));
         setAffDailyWithdrawals(String(s.aff_daily_withdrawals));
+        setAffWithdrawalFee(String(s.aff_withdrawal_fee ?? '0'));
         setPlayerMinDeposit(String(s.player_min_deposit));
         setPlayerMinWithdrawal(String(s.player_min_withdrawal));
         setPlayerRollover(String(s.player_rollover));
@@ -339,13 +344,23 @@ export function AdminConfiguracoesView() {
                       suffix="R$"
                     />
                   </View>
-                  <Field
-                    label="Saques diários (quantidade)"
-                    value={affDailyWithdrawals}
-                    onChangeText={setAffDailyWithdrawals}
-                    placeholder="1"
-                    hint="Número máximo de saques por dia por afiliado"
-                  />
+                  <View style={styles.row2}>
+                    <Field
+                      label="Taxa de saque (%)"
+                      value={affWithdrawalFee}
+                      onChangeText={setAffWithdrawalFee}
+                      placeholder="0"
+                      hint="Percentual descontado no saque do afiliado"
+                      suffix="%"
+                    />
+                    <Field
+                      label="Saques diários (qtd)"
+                      value={affDailyWithdrawals}
+                      onChangeText={setAffDailyWithdrawals}
+                      placeholder="1"
+                      hint="Número máximo de saques por dia por afiliado"
+                    />
+                  </View>
                 </View>
               </>
             )}
