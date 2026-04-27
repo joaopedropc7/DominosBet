@@ -84,18 +84,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     const oramaData = await oramaRes.json();
+
+    // ── 6. Gravar log da requisição ───────────────────────────
+    await adminSupabase.rpc('insert_api_log', {
+      p_type:          'pix-out',
+      p_withdrawal_id: withdrawalId,
+      p_external_ref:  wd.external_ref,
+      p_status_code:   oramaRes.status,
+      p_request_body:  payload,
+      p_response_body: oramaData,
+      p_error:         oramaRes.ok ? null : (oramaData?.message ?? `HTTP ${oramaRes.status}`),
+    });
+
     if (!oramaRes.ok) {
       return res.status(400).json({
         error: oramaData?.message ?? `OramaPay erro ${oramaRes.status}`,
       });
     }
 
-    // ── 6. Atualiza status para "processing" ──────────────────
+    // ── 7. Atualiza status para "processing" ──────────────────
     const { error: updateErr } = await adminSupabase.rpc(
       'admin_set_withdrawal_processing',
       {
-        p_withdrawal_id: withdrawalId,
-        p_orama_id:      oramaData.id ?? '',
+        p_withdrawal_id:  withdrawalId,
+        p_orama_id:       oramaData.id ?? '',
         p_orama_response: oramaData,
       },
     );

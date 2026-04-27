@@ -14,6 +14,7 @@ const NAV_SECTIONS = [
       { label: 'Dashboard',      icon: 'view-dashboard-outline', href: '/admin'                  },
       { label: 'Usuários',       icon: 'account-group-outline',  href: '/admin/usuarios'         },
       { label: 'Transações',     icon: 'swap-horizontal',        href: '/admin/transacoes'       },
+      { label: 'Logs de API',    icon: 'text-box-search-outline',href: '/admin/logs'             },
       { label: 'Gateway',        icon: 'credit-card-outline',    href: '/admin/gateway'          },
       { label: 'Configurações',  icon: 'cog-outline',            href: '/admin/configuracoes'    },
     ],

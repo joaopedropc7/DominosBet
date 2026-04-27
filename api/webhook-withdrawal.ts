@@ -51,6 +51,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }));
     }
 
+    // ── Gravar log do webhook ─────────────────────────────────
+    await supabase.rpc('insert_api_log', {
+      p_type:          'webhook-withdrawal',
+      p_withdrawal_id: null,
+      p_external_ref:  ref,
+      p_status_code:   error ? 500 : 200,
+      p_request_body:  body,
+      p_response_body: null,
+      p_error:         error ? error.message : null,
+    });
+
     if (error) {
       console.error('[webhook-withdrawal] falhou:', error.message);
       return res.status(500).json({ error: error.message });
