@@ -74,6 +74,11 @@ export async function abandonMatch(roomId: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+/** Heartbeat ping while waiting in queue — keeps the room from being auto-expired. */
+export async function pingMatchmakingQueue(roomId: string): Promise<void> {
+  await supabase.rpc('ping_matchmaking_queue', { p_room_id: roomId });
+}
+
 /** Cancel a waiting room before anyone joins. */
 export async function leaveMatchmaking(roomId: string): Promise<void> {
   const { error } = await supabase.rpc('leave_matchmaking', { room_id: roomId });

@@ -1,17 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, StyleSheet, Text, View } from 'react-native';
+import type { AppStateStatus } from 'react-native';
 import { Button } from '@/components/base/Button';
 import { Screen } from '@/components/base/Screen';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { useResponsive } from '@/hooks/useResponsive';
 import { useUserData } from '@/hooks/useUserData';
-import { joinMatchmaking, leaveMatchmaking, abandonAndRematch, calcPrize } from '@/services/online-match';
+import { joinMatchmaking, leaveMatchmaking, abandonAndRematch, calcPrize, pingMatchmakingQueue } from '@/services/online-match';
 import { formatCoins } from '@/utils/format';
 import { supabase } from '@/services/supabase';
 import { theme } from '@/theme';
 import type { MatchRoomRow } from '@/types/database';
+
+// Seconds the user can stay away from the tab before being removed from queue
+const IDLE_GRACE_SECONDS = 10;
 
 type SearchPhase = 'joining' | 'reconnecting' | 'waiting' | 'found' | 'error';
 
@@ -25,9 +29,15 @@ export function MatchSearchScreenView({ mode, entryFee }: MatchSearchScreenViewP
   const { profile } = useUserData();
   const [phase, setPhase] = useState<SearchPhase>('joining');
   const [errorMsg, setErrorMsg] = useState('');
-  const roomIdRef = useRef<string | null>(null);
-  const roleRef   = useRef<'p1' | 'p2'>('p1');
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const roomIdRef   = useRef<string | null>(null);
+  const roleRef     = useRef<'p1' | 'p2'>('p1');
+  const channelRef  = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  // Refs used inside AppState listener to avoid stale closures
+  const phaseRef    = useRef<SearchPhase>('joining');
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Keep phaseRef in sync with state
+  phaseRef.current = phase;
 
   useEffect(() => {
     let mounted = true;
@@ -93,6 +103,53 @@ export function MatchSearchScreenView({ mode, entryFee }: MatchSearchScreenViewP
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
+      }
+    };
+  }, []);
+
+  // ── Idle / visibility detection + heartbeat ─────────────────
+  useEffect(() => {
+    function kickFromQueue() {
+      if (phaseRef.current !== 'waiting' || roleRef.current !== 'p1' || !roomIdRef.current) return;
+      leaveMatchmaking(roomIdRef.current).catch(() => {});
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+      setErrorMsg('Você saiu da fila por inatividade. Volte para entrar novamente.');
+      setPhase('error');
+    }
+
+    function onAppStateChange(nextState: AppStateStatus) {
+      if (nextState !== 'active') {
+        // User left — start grace-period countdown
+        if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = setTimeout(kickFromQueue, IDLE_GRACE_SECONDS * 1000);
+      } else {
+        // User came back — cancel countdown
+        if (idleTimerRef.current) {
+          clearTimeout(idleTimerRef.current);
+          idleTimerRef.current = null;
+        }
+      }
+    }
+
+    // Heartbeat: ping every 30 s so the server doesn't expire our room
+    const heartbeat = setInterval(() => {
+      if (phaseRef.current === 'waiting' && roleRef.current === 'p1' && roomIdRef.current) {
+        pingMatchmakingQueue(roomIdRef.current).catch(() => {});
+      }
+    }, 30_000);
+
+    // AppState handles both native (background/inactive) and web (visibilitychange)
+    const sub = AppState.addEventListener('change', onAppStateChange);
+
+    return () => {
+      sub.remove();
+      clearInterval(heartbeat);
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = null;
       }
     };
   }, []);
@@ -225,7 +282,9 @@ export function MatchSearchScreenView({ mode, entryFee }: MatchSearchScreenViewP
           )}
           {phase === 'error' && (
             <>
-              <Text style={[styles.title, styles.titleError, isCompact && styles.titleCompact]}>Erro</Text>
+              <Text style={[styles.title, styles.titleError, isCompact && styles.titleCompact]}>
+                {errorMsg.includes('inatividade') ? 'Fila cancelada' : 'Erro'}
+              </Text>
               <Text style={styles.errorText}>{errorMsg}</Text>
             </>
           )}
