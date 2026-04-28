@@ -505,122 +505,223 @@ function computeHorizontalLayout(
 
 // ── Mobile: serpentine (snake) layout ────────────────────────────────────────
 //
-// All tiles are placed from board[0] to board[N] in chain order along
-// a snake that starts at (row=0, col=GHOST_RESERVE, dir=LTR):
+// STABLE POSITIONS: each tile is assigned a snake-position based on its
+// distance from the ANCHOR tile (the first tile ever played), not from
+// board[0].  This means positions never shift when tiles are added to either
+// chain end — only the new tile itself appears; all others are frozen.
 //
-//   Row 0 LTR: col GHOST_RESERVE … colsPerRow−1
-//   Row 1 RTL: col colsPerRow−1  … 0
-//   Row 2 LTR: col 0             … colsPerRow−1
-//   …
+// Snake model
+// ───────────
+//   Snake positions 0, 1, 2, … increase continuously.
+//   Row r contains positions [r*colsPerRow … (r+1)*colsPerRow − 1].
+//   Even rows (r%2=0) go LTR: pos p → physical col  p % colsPerRow.
+//   Odd  rows (r%2=1) go RTL: pos p → physical col  colsPerRow−1 − p%colsPerRow.
 //
-// Because the snake always starts at col=GHOST_RESERVE, board[0] is always
-// at (row=0, col=GHOST_RESERVE).  The left ghost sits at (row=0, col=0),
-// always immediately to the left of board[0], even as left-chain tiles are
-// prepended (they become the new board[0], at the same starting position).
+//   A 2-wide normal tile occupies positions [p, p+1]; both must be in the
+//   same row (no straddling).  snapForward / snapBackward skip one slot when
+//   a tile would straddle a row boundary.
 //
-// Each chain row is ROW_STRIDE = 2×SLOT_PX tall so doubles (2 slots high)
-// fit without overlapping the row above.  Normal tiles are vertically centred
-// in the lower half of the stride.
+// Anchor placement
+// ────────────────
+//   LEFT_RESERVE = ceil(MAX_LEFT_SLOTS/colsPerRow)*colsPerRow + 2
+//   where MAX_LEFT_SLOTS = 32 (≥ worst-case left chain + boundary skips).
+//   This makes LEFT_RESERVE = N*colsPerRow + 2, so the anchor always starts
+//   at posInRow=2 in its row, with the left ghost filling posInRow 0–1 of
+//   the SAME row — always visually adjacent, never with gaps.
+//
+// swapPips for RTL tiles
+// ──────────────────────
+//   orientTile() guarantees board[i].right === board[i+1].left.  In an RTL
+//   row the "outgoing" end (tile.left) occupies the higher-numbered snake
+//   position → physical LEFT column, but DominoTileView draws tile.left on
+//   the left by default.  So for RTL we set swapPips=true to render
+//   tile.right on the physical left (connection end) and tile.left on the
+//   physical right (outgoing end), keeping the chain visually consistent.
+
+/** Max slots reserved before the anchor for the left chain + ghost. */
+const MAX_LEFT_SLOTS = 32;
 
 function computeSerpentineLayout(
   board: { id: string; left: number; right: number }[],
   containerH: number,
   screenW: number,
 ): LinearBoardLayout {
-  const S   = SLOT_PX;
-  const PAD_H = 6;
-  const PAD_V = 6;
-  const GR    = GHOST_RESERVE;
-
-  // Slots that fit across the screen (minimum GR+4 so there is meaningful space)
-  const colsPerRow = Math.max(GR + 4, Math.floor((screenW - PAD_H * 2) / S));
-
-  // Each visual row = 2 slots tall
-  //   Normal tile (S tall) → top = PAD_V + row*ROW_STRIDE + S
-  //   Double tile (2S tall) → top = PAD_V + row*ROW_STRIDE
+  const S         = SLOT_PX;
+  const PAD_H     = 6;
+  const PAD_V     = 6;
   const ROW_STRIDE = 2 * S;
 
-  const canvasWidth = colsPerRow * S + PAD_H * 2;
+  const colsPerRow = Math.max(6, Math.floor((screenW - PAD_H * 2) / S));
 
-  const tilePositions: LinearTilePos[] = [];
+  // LEFT_RESERVE is always N*colsPerRow + 2, guaranteeing:
+  //   • anchor starts at posInRow=2 in its row
+  //   • left ghost fills posInRow 0–1 of the same row (gap-free adjacency)
+  const leftRows   = Math.ceil(MAX_LEFT_SLOTS / colsPerRow);
+  const LEFT_RESERVE = leftRows * colsPerRow + 2;
 
-  // Cursor state: chainCol = leftmost slot of the next tile
-  let chainRow = 0;
-  let chainCol = GR; // row 0 reserves GR slots for the left ghost
-  let dir: 'ltr' | 'rtl' = 'ltr';
+  // ── Find anchor (first tile played; no -l / -r suffix) ───────────────────
+  const anchorIdx    = board.findIndex(t => !t.id.endsWith('-l') && !t.id.endsWith('-r'));
+  const anchorIdxEff = anchorIdx === -1 ? 0 : anchorIdx;
 
-  for (const tile of board) {
-    const isDouble = tile.left === tile.right;
-    const tileW    = isDouble ? 1 : 2;
+  // Map tile.id → its snake start-position (stable)
+  const snakePos = new Map<string, number>();
 
-    // ── Wrap to next row if the tile doesn't fit ────────────────────────────
-    if (dir === 'ltr' && chainCol + tileW > colsPerRow) {
-      chainRow++;
-      dir      = 'rtl';
-      chainCol = colsPerRow - tileW;
-    } else if (dir === 'rtl' && chainCol < 0) {
-      chainRow++;
-      dir      = 'ltr';
-      chainCol = 0; // subsequent LTR rows use the full width (no GHOST_RESERVE)
-    }
-
-    tilePositions.push({
-      tileId: tile.id,
-      left: PAD_H + chainCol * S,
-      top: isDouble
-        ? PAD_V + chainRow * ROW_STRIDE          // double spans both slots
-        : PAD_V + chainRow * ROW_STRIDE + S,     // normal sits in lower slot
-      orientation: isDouble ? 'vertical' : 'horizontal',
-      // RTL tiles: the connecting end is tile.left but must appear on the
-      // physical RIGHT side — opposite the LTR convention.
-      swapPips: dir === 'rtl',
-    });
-
-    chainCol += dir === 'ltr' ? tileW : -tileW;
+  // ── Right chain: advance forward from LEFT_RESERVE ────────────────────────
+  let rightCursor = LEFT_RESERVE;
+  for (let i = anchorIdxEff; i < board.length; i++) {
+    const tile  = board[i];
+    const tileW = tile.left === tile.right ? 1 : 2;
+    rightCursor = snakeSnapForward(rightCursor, tileW, colsPerRow);
+    snakePos.set(tile.id, rightCursor);
+    rightCursor += tileW;
   }
 
-  // ── Ghost drop zones ────────────────────────────────────────────────────────
+  // ── Left chain: go backward from LEFT_RESERVE − 1 ────────────────────────
+  let leftCursor = LEFT_RESERVE - 1; // rightmost available pos for left chain
+  for (let i = anchorIdxEff - 1; i >= 0; i--) {
+    const tile  = board[i];
+    const tileW = tile.left === tile.right ? 1 : 2;
+    const start = snakeSnapBackward(leftCursor, tileW, colsPerRow);
+    snakePos.set(tile.id, start);
+    leftCursor = start - 1;
+  }
+
+  // ── Pixel positions ───────────────────────────────────────────────────────
+  const tilePositions: LinearTilePos[] = board.map(tile => {
+    const sp       = snakePos.get(tile.id) ?? LEFT_RESERVE;
+    const isDouble = tile.left === tile.right;
+    const layout   = snakePosToLayout(sp, isDouble, colsPerRow, PAD_H, PAD_V, ROW_STRIDE, S);
+    return { ...layout, tileId: tile.id };
+  });
+
+  // ── Ghost drop zones ──────────────────────────────────────────────────────
   const ghostW = 2 * S;
   const ghostH = S;
-  const rowGhostTop = (r: number) => PAD_V + r * ROW_STRIDE + S;
 
-  // Left ghost: the GHOST_RESERVE area is always at (row=0, col=0)
-  const leftGhost: LinearGhostPos | null = board.length > 0
-    ? { left: PAD_H, top: rowGhostTop(0), width: ghostW, height: ghostH }
-    : null;
-
-  // Right ghost: cursor position after the last tile, wrapping if needed
-  let rRow = chainRow;
-  let rCol = chainCol;
-  let rDir = dir;
-
-  if (rDir === 'ltr' && rCol + 2 > colsPerRow) {
-    rRow++;
-    rDir = 'rtl';
-    rCol = colsPerRow - 2;
-  } else if (rDir === 'rtl' && rCol < 0) {
-    rRow++;
-    rDir = 'ltr';
-    rCol = 0;
-  }
-
+  // Right ghost: where the next right tile would go
+  const rgStart = snakeSnapForward(rightCursor, 2, colsPerRow);
   const rightGhost: LinearGhostPos | null = board.length > 0
-    ? { left: PAD_H + rCol * S, top: rowGhostTop(rRow), width: ghostW, height: ghostH }
+    ? snakePosToGhost(rgStart, colsPerRow, PAD_H, PAD_V, ROW_STRIDE, S, ghostW, ghostH)
     : null;
 
-  // Canvas height: tall enough for all rows, but at least containerH
-  const numRows    = Math.max(1, chainRow + 1);
-  const computedH  = PAD_V * 2 + numRows * ROW_STRIDE + S;
-  const canvasHeight = Math.max(containerH, computedH);
+  // Left ghost: where the next left tile would go (always in posInRow 0–1
+  // of the anchor's row before any left tiles are added, and steps
+  // backward as left tiles fill in)
+  const lgStart = snakeSnapBackward(leftCursor, 2, colsPerRow);
+  const leftGhost: LinearGhostPos | null = board.length > 0
+    ? snakePosToGhost(lgStart, colsPerRow, PAD_H, PAD_V, ROW_STRIDE, S, ghostW, ghostH)
+    : null;
 
-  // No horizontal scrolling needed — canvas fits within screen width
+  // ── Canvas dimensions ─────────────────────────────────────────────────────
+  const maxSp   = board.length > 0 ? Math.max(...snakePos.values()) + 1 : LEFT_RESERVE + 2;
+  const maxRow  = Math.floor(maxSp / colsPerRow);
+  const numRows = maxRow + 1;
+  const canvasHeight = Math.max(containerH, PAD_V * 2 + numRows * ROW_STRIDE + S);
+
   return {
-    canvasWidth,
+    canvasWidth: colsPerRow * S + PAD_H * 2,
     canvasHeight,
     tilePositions,
     leftGhost,
     rightGhost,
     anchorScrollX: 0,
+  };
+}
+
+// ── Serpentine helpers ────────────────────────────────────────────────────────
+
+/**
+ * Snap a forward cursor to the next row start if a tileW-wide tile would
+ * straddle the current row boundary.
+ */
+function snakeSnapForward(cursor: number, tileW: number, colsPerRow: number): number {
+  if (tileW <= 1) return cursor;
+  const posInRow = cursor % colsPerRow;
+  if (posInRow + tileW > colsPerRow) {
+    return (Math.floor(cursor / colsPerRow) + 1) * colsPerRow;
+  }
+  return cursor;
+}
+
+/**
+ * Given that we want to place a tileW-wide tile with its last slot AT OR
+ * BEFORE `cursor`, return the start snake-pos (first slot), snapping to the
+ * end of the previous row if the tile would straddle.
+ */
+function snakeSnapBackward(cursor: number, tileW: number, colsPerRow: number): number {
+  if (tileW <= 1) return cursor;
+  const start    = cursor - tileW + 1;
+  const startRow = Math.floor(start / colsPerRow);
+  const endRow   = Math.floor(cursor / colsPerRow);
+  if (startRow !== endRow) {
+    // Straddles: place at end of the row BEFORE cursor's row
+    const prevRowEnd = endRow * colsPerRow - 1;
+    return prevRowEnd - tileW + 1;
+  }
+  return start;
+}
+
+/**
+ * Convert a snake start-position to pixel layout props for one tile.
+ *
+ * In RTL rows the snake position maps to the RIGHTMOST physical slot of the
+ * tile, so the tile's pixel-left is shifted by (tileW−1) slots to the left.
+ */
+function snakePosToLayout(
+  sp: number,
+  isDouble: boolean,
+  colsPerRow: number,
+  PAD_H: number,
+  PAD_V: number,
+  ROW_STRIDE: number,
+  S: number,
+): LinearTilePos {
+  const row      = Math.floor(sp / colsPerRow);
+  const posInRow = sp % colsPerRow;
+  const isLTR    = row % 2 === 0;
+  const tileW    = isDouble ? 1 : 2;
+
+  // LTR: posInRow is the leftmost slot of the tile.
+  // RTL: posInRow is the rightmost slot; leftmost = colsPerRow−1−posInRow − (tileW−1).
+  const pixelLeft = PAD_H + S * (isLTR
+    ? posInRow
+    : colsPerRow - 1 - posInRow - (tileW - 1));
+
+  return {
+    tileId: '',   // caller overwrites via board.map
+    left:    pixelLeft,
+    top:     isDouble
+      ? PAD_V + row * ROW_STRIDE        // double spans full 2×S height
+      : PAD_V + row * ROW_STRIDE + S,  // normal tile occupies lower half
+    orientation: isDouble ? 'vertical' : 'horizontal',
+    swapPips: !isLTR,
+  };
+}
+
+/** Pixel bounding box for a 2-wide ghost drop zone at a given snake position. */
+function snakePosToGhost(
+  sp: number,
+  colsPerRow: number,
+  PAD_H: number,
+  PAD_V: number,
+  ROW_STRIDE: number,
+  S: number,
+  ghostW: number,
+  ghostH: number,
+): LinearGhostPos {
+  const row      = Math.floor(sp / colsPerRow);
+  const posInRow = sp % colsPerRow;
+  const isLTR    = row % 2 === 0;
+
+  const pixelLeft = PAD_H + S * (isLTR
+    ? posInRow
+    : colsPerRow - 2 - posInRow);   // 2-wide ghost; same formula as 2-wide tile
+
+  return {
+    left:   pixelLeft,
+    top:    PAD_V + row * ROW_STRIDE + S,
+    width:  ghostW,
+    height: ghostH,
   };
 }
 
