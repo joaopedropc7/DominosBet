@@ -104,23 +104,31 @@ function Half({
       {hidden ? (
         <View style={styles.hiddenCore} />
       ) : (
+        // 3×3 flexbox grid — works reliably on Android/iOS unlike
+        // position:absolute + percentage top/left inside flex:1 containers
         <View style={styles.pipGrid}>
-          {PIP_LAYOUTS[value].map(([row, col], index) => (
-            <View
-              key={`${row}-${col}-${index}`}
-              style={[
-                styles.pip,
-                {
-                  width: metrics.pip,
-                  height: metrics.pip,
-                  borderRadius: metrics.pip / 2,
-                  marginLeft: -(metrics.pip / 2),
-                  marginTop: -(metrics.pip / 2),
-                  top: `${row * 40 + 10}%` as any,
-                  left: `${col * 40 + 10}%` as any,
-                },
-              ]}
-            />
+          {([0, 1, 2] as const).map((row) => (
+            <View key={row} style={styles.pipRow}>
+              {([0, 1, 2] as const).map((col) => {
+                const hasPip = PIP_LAYOUTS[value].some(([r, c]) => r === row && c === col);
+                return (
+                  <View key={col} style={styles.pipCell}>
+                    {hasPip && (
+                      <View
+                        style={[
+                          styles.pip,
+                          {
+                            width: metrics.pip,
+                            height: metrics.pip,
+                            borderRadius: metrics.pip / 2,
+                          },
+                        ]}
+                      />
+                    )}
+                  </View>
+                );
+              })}
+            </View>
           ))}
         </View>
       )}
@@ -203,12 +211,20 @@ const styles = StyleSheet.create({
     width: 1,
   },
   pipGrid: {
-    width: '100%',
-    height: '100%',
-    position: 'relative',
+    flex: 1,
+    alignSelf: 'stretch',
+    flexDirection: 'column',
+  },
+  pipRow: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  pipCell: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pip: {
-    position: 'absolute',
     backgroundColor: '#111111',
   },
   hiddenCore: {

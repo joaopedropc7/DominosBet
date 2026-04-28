@@ -5,7 +5,6 @@ import { sendRematchInvite } from '@/services/ranking';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Pressable,
   ScrollView,
@@ -42,6 +41,7 @@ export function OnlineMatchScreenView({
   const [boardBoxH, setBoardBoxH]       = useState(() => Math.max(180, screenH * 0.42));
   const [selectedTileId, setSelectedTileId] = useState<string | null>(null);
   const [rematching, setRematching]     = useState(false);
+  const [showAbandonModal, setShowAbandonModal] = useState(false);
 
   const {
     phase,
@@ -177,10 +177,10 @@ export function OnlineMatchScreenView({
     hasScrolledRef.current = false;
   }
 
-  // Scroll to center the anchor tile when the first tile is placed
+  // Scroll to center the anchor tile when any tile is first visible (handles F5 reload)
   const boardLength = game?.board.length ?? 0;
   useEffect(() => {
-    if (boardLength === 1 && !hasScrolledRef.current && boardScrollRef.current && boardLayout) {
+    if (boardLength > 0 && !hasScrolledRef.current && boardScrollRef.current && boardLayout) {
       hasScrolledRef.current = true;
       boardScrollRef.current.scrollTo({ x: boardLayout.anchorScrollX, animated: false });
     }
@@ -228,17 +228,13 @@ export function OnlineMatchScreenView({
   }
 
   function handleAbandon() {
-    Alert.alert('Desistir', 'Tem certeza? Seu adversário vencerá e ficará com as moedas.', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Desistir',
-        style: 'destructive',
-        onPress: async () => {
-          await abandonGame();
-          router.replace('/');
-        },
-      },
-    ]);
+    setShowAbandonModal(true);
+  }
+
+  async function confirmAbandon() {
+    setShowAbandonModal(false);
+    await abandonGame();
+    router.replace('/');
   }
 
   // ── Loading / waiting phases ──────────────────────────────────────────────
@@ -296,7 +292,7 @@ export function OnlineMatchScreenView({
             onPress={handleAbandon}
             style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
           >
-            <MaterialCommunityIcons name="flag-outline" size={18} color={theme.colors.textMuted} />
+            <MaterialCommunityIcons name="close" size={20} color={theme.colors.textMuted} />
           </Pressable>
           <View style={styles.topCenter}>
             <Text style={styles.topTitle}>1v1 · {formatCoins(room?.pot ?? ENTRY_FEE * 2)} pot</Text>
@@ -457,6 +453,31 @@ export function OnlineMatchScreenView({
             <Text style={styles.openerSub}>A peça mais alta determinou a ordem</Text>
           </Animated.View>
         </Animated.View>
+      )}
+
+      {/* ── Abandon confirmation modal ───────────────────────────────────── */}
+      {showAbandonModal && (
+        <View style={styles.abandonOverlay}>
+          <View style={styles.abandonCard}>
+            <MaterialCommunityIcons name="flag-outline" size={40} color={theme.colors.danger} />
+            <Text style={styles.abandonTitle}>Desistir da partida?</Text>
+            <Text style={styles.abandonSub}>
+              Seu adversário vencerá e ficará com as moedas.
+            </Text>
+            <Pressable
+              onPress={confirmAbandon}
+              style={({ pressed }) => [styles.abandonBtnConfirm, pressed && styles.resultButtonPressed]}
+            >
+              <Text style={styles.abandonBtnConfirmText}>Sim, desistir</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setShowAbandonModal(false)}
+              style={({ pressed }) => [styles.abandonBtnCancel, pressed && styles.resultButtonPressed]}
+            >
+              <Text style={styles.abandonBtnCancelText}>Continuar jogando</Text>
+            </Pressable>
+          </View>
+        </View>
       )}
 
       {/* ── Result overlay ────────────────────────────────────────────────── */}
@@ -673,4 +694,14 @@ const styles = StyleSheet.create({
   resultButtonText: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.display, fontSize: 15 },
   resultButtonTextDark: { color: '#131313', fontFamily: theme.typography.fontFamily.display, fontSize: 15 },
   resultButtonTextRematch: { color: theme.colors.primary, fontFamily: theme.typography.fontFamily.display, fontSize: 15 },
+
+  // Abandon modal
+  abandonOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.72)', alignItems: 'center', justifyContent: 'center', zIndex: 30 },
+  abandonCard: { backgroundColor: '#1A1A1A', borderRadius: 24, borderWidth: 1, borderColor: 'rgba(220,53,69,0.35)', padding: 28, width: '85%', alignItems: 'center', gap: 10 },
+  abandonTitle: { color: '#FFF7E7', fontFamily: theme.typography.fontFamily.display, fontSize: 24, textAlign: 'center' },
+  abandonSub: { color: 'rgba(255,255,255,0.5)', fontFamily: theme.typography.fontFamily.bodyMedium, fontSize: 13, textAlign: 'center', marginBottom: 8 },
+  abandonBtnConfirm: { width: '100%', borderRadius: 999, paddingVertical: 13, alignItems: 'center', backgroundColor: theme.colors.danger, borderWidth: 0 },
+  abandonBtnConfirmText: { color: '#fff', fontFamily: theme.typography.fontFamily.display, fontSize: 15 },
+  abandonBtnCancel: { width: '100%', borderRadius: 999, paddingVertical: 13, alignItems: 'center', backgroundColor: theme.colors.surfaceHigh, borderWidth: 1, borderColor: theme.colors.outline },
+  abandonBtnCancelText: { color: theme.colors.text, fontFamily: theme.typography.fontFamily.display, fontSize: 15 },
 });
