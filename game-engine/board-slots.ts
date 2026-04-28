@@ -352,32 +352,38 @@ export function getBoardGrid(board: BoardSlotState): (number | null)[][] {
  */
 export const SLOT_PX = 28;
 
-// ─── Linear horizontal board layout ──────────────────────────────────────────
+// ─── Board layout ─────────────────────────────────────────────────────────────
 //
-// Simple matrix model for mobile:
-//   • The board is a single horizontal chain in a ScrollView.
-//   • Each slot is SLOT_PX × SLOT_PX (28 × 28 px).
-//   • Normal tile  (left ≠ right): 2 slots wide, 1 slot tall — horizontal.
-//   • Double tile  (left = right):  1 slot wide, 2 slots tall — vertical,
-//                                   centered on the chain row (sticks upward).
-//   • The first tile played is the ANCHOR at slot column LINEAR_ANCHOR_SLOT.
-//     Left-side plays grow leftward; right-side plays grow rightward.
-//     Once placed, a tile's column NEVER changes — no reorganization.
-//   • The canvas is LINEAR_TOTAL_SLOTS wide, wrapped in a horizontal ScrollView.
+// DESKTOP  (screenW ≥ 700 px) — wide horizontal-scroll canvas
+//   200 slots × 28 px.  Anchor at slot 100.  Left plays grow leftward,
+//   right plays grow rightward.  The ScrollView is scrolled so the anchor
+//   tile starts centred on screen.
 //
-// Tile ID convention (from the game engine):
-//   First tile:   original ID  (e.g. "3-5")
-//   Left plays:   "${id}-l"
-//   Right plays:  "${id}-r"
+// MOBILE   (screenW < 700 px) — serpentine / snake layout
+//   Tiles are laid out in a compact snake that wraps at the screen edge:
+//     Row 0 (LTR) → Row 1 (RTL) → Row 2 (LTR) → …
+//   Two slots (GHOST_RESERVE) are always kept empty at the start of row 0 so
+//   the left-chain ghost drop-zone fits immediately to the left of board[0].
+//
+//   RTL tiles get swapPips=true: orientTile() ensures board[i].right ===
+//   board[i+1].left, so in an RTL row the connecting end (tile.left) must be
+//   shown on the physical RIGHT of the tile — opposite of the normal LTR
+//   convention — to stay visually adjacent to the previous tile.
+//
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const LINEAR_TOTAL_SLOTS = 200; // slots in the full canvas (100 left + 100 right)
-export const LINEAR_ANCHOR_SLOT = 100; // column where the first tile is placed
+export const LINEAR_TOTAL_SLOTS = 200;
+export const LINEAR_ANCHOR_SLOT = 100;
+
+/** px threshold below which the serpentine layout is used. */
+const MOBILE_BREAKPOINT = 700;
+/** Slots reserved at the start of serpentine row 0 for the left ghost. */
+const GHOST_RESERVE = 2;
 
 export type LinearTilePos = {
   tileId: string;
-  left: number;        // pixel x on the canvas
-  top: number;         // pixel y on the canvas
+  left: number;
+  top: number;
   orientation: 'horizontal' | 'vertical';
   swapPips: boolean;
 };
@@ -395,18 +401,32 @@ export type LinearBoardLayout = {
   tilePositions: LinearTilePos[];
   rightGhost: LinearGhostPos | null;
   leftGhost: LinearGhostPos | null;
-  /** x offset to scroll so the first tile is centered on screen */
+  /** x offset to scroll so the anchor tile is centred on screen (desktop). */
   anchorScrollX: number;
 };
 
 /**
- * Compute a stable, linear horizontal layout for the domino board.
+ * Compute the board layout.
+ * Desktop (≥ 700 px wide): single wide horizontal-scroll canvas.
+ * Mobile  (<  700 px wide): compact serpentine that wraps within screen width.
  *
- * @param board       The board array in chain order: board[0] = leftmost tile.
- * @param containerH  Available height of the board view in pixels.
- * @param screenW     Width of the visible screen/viewport in pixels.
+ * @param board      Chain-ordered tile array: board[0] = leftmost tile.
+ * @param containerH Available pixel height of the board view.
+ * @param screenW    Visible screen / viewport width in pixels.
  */
 export function computeLinearLayout(
+  board: { id: string; left: number; right: number }[],
+  containerH: number,
+  screenW: number,
+): LinearBoardLayout {
+  return screenW >= MOBILE_BREAKPOINT
+    ? computeHorizontalLayout(board, containerH, screenW)
+    : computeSerpentineLayout(board, containerH, screenW);
+}
+
+// ── Desktop: single infinite horizontal canvas ───────────────────────────────
+
+function computeHorizontalLayout(
   board: { id: string; left: number; right: number }[],
   containerH: number,
   screenW: number,
@@ -419,16 +439,11 @@ export function computeLinearLayout(
   const canvasWidth  = TOTAL * S + PAD_H * 2;
   const canvasHeight = containerH;
 
-  // 3 visual rows: row 0 = above chain (double top), row 1 = chain, row 2 = below chain
+  // 3 visual rows: row 0 = above chain (double top), row 1 = chain, row 2 = below
   const CHAIN_ROW = 1;
   const ROWS = 3;
   const padV = Math.max(4, (containerH - ROWS * S) / 2);
-  const chainTop = padV + CHAIN_ROW * S; // pixel y of the chain row top
-
-  // ── Assign absolute slot columns ────────────────────────────────────────────
-  // The anchor tile is the first one played (no "-l" or "-r" suffix).
-  // Left tiles are prepended to board[] — they have negative distance from ANCHOR.
-  // Right tiles are appended to board[] — they have positive distance from ANCHOR.
+  const chainTop = padV + CHAIN_ROW * S;
 
   const anchorIdx = board.findIndex(
     (t) => !t.id.endsWith('-l') && !t.id.endsWith('-r'),
@@ -437,7 +452,6 @@ export function computeLinearLayout(
 
   const slotCol = new Map<string, number>();
 
-  // Anchor + right-of-anchor → grow rightward
   let col = ANCHOR;
   for (let i = anchorIdxEff; i < board.length; i++) {
     const tile = board[i];
@@ -445,7 +459,6 @@ export function computeLinearLayout(
     col += tile.left === tile.right ? 1 : 2;
   }
 
-  // Left-of-anchor → grow leftward
   col = ANCHOR;
   for (let i = anchorIdxEff - 1; i >= 0; i--) {
     const tile = board[i];
@@ -456,22 +469,18 @@ export function computeLinearLayout(
 
   const colToX = (c: number) => PAD_H + c * S;
 
-  // ── Tile pixel positions ────────────────────────────────────────────────────
   const tilePositions: LinearTilePos[] = board.map((tile) => {
     const c = slotCol.get(tile.id) ?? ANCHOR;
     const isDouble = tile.left === tile.right;
     return {
       tileId: tile.id,
       left: colToX(c),
-      // Doubles stick UPWARD from the chain row (top = chainTop - S)
-      // Normal tiles sit ON the chain row (top = chainTop)
       top: isDouble ? chainTop - S : chainTop,
       orientation: isDouble ? 'vertical' : 'horizontal',
-      swapPips: false, // orientTileForBoard already handles orientation
+      swapPips: false, // orientTile() already handles left/right orientation
     };
   });
 
-  // ── Ghost positions (drop zones) ────────────────────────────────────────────
   const ghostW   = 2 * S;
   const ghostH   = S;
   const ghostTop = chainTop;
@@ -480,20 +489,139 @@ export function computeLinearLayout(
   let leftGhost:  LinearGhostPos | null = null;
 
   if (board.length > 0) {
-    const rt  = board[board.length - 1];
-    const rc  = slotCol.get(rt.id) ?? ANCHOR;
-    const rw  = rt.left === rt.right ? 1 : 2;
+    const rt = board[board.length - 1];
+    const rc = slotCol.get(rt.id) ?? ANCHOR;
+    const rw = rt.left === rt.right ? 1 : 2;
     rightGhost = { left: colToX(rc + rw), top: ghostTop, width: ghostW, height: ghostH };
 
-    const lt  = board[0];
-    const lc  = slotCol.get(lt.id) ?? ANCHOR;
+    const lt = board[0];
+    const lc = slotCol.get(lt.id) ?? ANCHOR;
     leftGhost  = { left: colToX(lc - 2), top: ghostTop, width: ghostW, height: ghostH };
   }
 
-  // ── Scroll offset to center the anchor (first tile) on screen ───────────────
   const anchorScrollX = Math.max(0, colToX(ANCHOR) - screenW / 2 + S);
-
   return { canvasWidth, canvasHeight, tilePositions, rightGhost, leftGhost, anchorScrollX };
+}
+
+// ── Mobile: serpentine (snake) layout ────────────────────────────────────────
+//
+// All tiles are placed from board[0] to board[N] in chain order along
+// a snake that starts at (row=0, col=GHOST_RESERVE, dir=LTR):
+//
+//   Row 0 LTR: col GHOST_RESERVE … colsPerRow−1
+//   Row 1 RTL: col colsPerRow−1  … 0
+//   Row 2 LTR: col 0             … colsPerRow−1
+//   …
+//
+// Because the snake always starts at col=GHOST_RESERVE, board[0] is always
+// at (row=0, col=GHOST_RESERVE).  The left ghost sits at (row=0, col=0),
+// always immediately to the left of board[0], even as left-chain tiles are
+// prepended (they become the new board[0], at the same starting position).
+//
+// Each chain row is ROW_STRIDE = 2×SLOT_PX tall so doubles (2 slots high)
+// fit without overlapping the row above.  Normal tiles are vertically centred
+// in the lower half of the stride.
+
+function computeSerpentineLayout(
+  board: { id: string; left: number; right: number }[],
+  containerH: number,
+  screenW: number,
+): LinearBoardLayout {
+  const S   = SLOT_PX;
+  const PAD_H = 6;
+  const PAD_V = 6;
+  const GR    = GHOST_RESERVE;
+
+  // Slots that fit across the screen (minimum GR+4 so there is meaningful space)
+  const colsPerRow = Math.max(GR + 4, Math.floor((screenW - PAD_H * 2) / S));
+
+  // Each visual row = 2 slots tall
+  //   Normal tile (S tall) → top = PAD_V + row*ROW_STRIDE + S
+  //   Double tile (2S tall) → top = PAD_V + row*ROW_STRIDE
+  const ROW_STRIDE = 2 * S;
+
+  const canvasWidth = colsPerRow * S + PAD_H * 2;
+
+  const tilePositions: LinearTilePos[] = [];
+
+  // Cursor state: chainCol = leftmost slot of the next tile
+  let chainRow = 0;
+  let chainCol = GR; // row 0 reserves GR slots for the left ghost
+  let dir: 'ltr' | 'rtl' = 'ltr';
+
+  for (const tile of board) {
+    const isDouble = tile.left === tile.right;
+    const tileW    = isDouble ? 1 : 2;
+
+    // ── Wrap to next row if the tile doesn't fit ────────────────────────────
+    if (dir === 'ltr' && chainCol + tileW > colsPerRow) {
+      chainRow++;
+      dir      = 'rtl';
+      chainCol = colsPerRow - tileW;
+    } else if (dir === 'rtl' && chainCol < 0) {
+      chainRow++;
+      dir      = 'ltr';
+      chainCol = 0; // subsequent LTR rows use the full width (no GHOST_RESERVE)
+    }
+
+    tilePositions.push({
+      tileId: tile.id,
+      left: PAD_H + chainCol * S,
+      top: isDouble
+        ? PAD_V + chainRow * ROW_STRIDE          // double spans both slots
+        : PAD_V + chainRow * ROW_STRIDE + S,     // normal sits in lower slot
+      orientation: isDouble ? 'vertical' : 'horizontal',
+      // RTL tiles: the connecting end is tile.left but must appear on the
+      // physical RIGHT side — opposite the LTR convention.
+      swapPips: dir === 'rtl',
+    });
+
+    chainCol += dir === 'ltr' ? tileW : -tileW;
+  }
+
+  // ── Ghost drop zones ────────────────────────────────────────────────────────
+  const ghostW = 2 * S;
+  const ghostH = S;
+  const rowGhostTop = (r: number) => PAD_V + r * ROW_STRIDE + S;
+
+  // Left ghost: the GHOST_RESERVE area is always at (row=0, col=0)
+  const leftGhost: LinearGhostPos | null = board.length > 0
+    ? { left: PAD_H, top: rowGhostTop(0), width: ghostW, height: ghostH }
+    : null;
+
+  // Right ghost: cursor position after the last tile, wrapping if needed
+  let rRow = chainRow;
+  let rCol = chainCol;
+  let rDir = dir;
+
+  if (rDir === 'ltr' && rCol + 2 > colsPerRow) {
+    rRow++;
+    rDir = 'rtl';
+    rCol = colsPerRow - 2;
+  } else if (rDir === 'rtl' && rCol < 0) {
+    rRow++;
+    rDir = 'ltr';
+    rCol = 0;
+  }
+
+  const rightGhost: LinearGhostPos | null = board.length > 0
+    ? { left: PAD_H + rCol * S, top: rowGhostTop(rRow), width: ghostW, height: ghostH }
+    : null;
+
+  // Canvas height: tall enough for all rows, but at least containerH
+  const numRows    = Math.max(1, chainRow + 1);
+  const computedH  = PAD_V * 2 + numRows * ROW_STRIDE + S;
+  const canvasHeight = Math.max(containerH, computedH);
+
+  // No horizontal scrolling needed — canvas fits within screen width
+  return {
+    canvasWidth,
+    canvasHeight,
+    tilePositions,
+    leftGhost,
+    rightGhost,
+    anchorScrollX: 0,
+  };
 }
 
 /**
