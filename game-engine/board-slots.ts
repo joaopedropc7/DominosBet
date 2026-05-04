@@ -564,16 +564,50 @@ function computeSerpentineLayout(
   const anchorIdxEff = anchorIdx === -1 ? 0 : anchorIdx;
 
   // Map tile.id → its snake start-position (stable)
-  const snakePos = new Map<string, number>();
+  const snakePos    = new Map<string, number>();
+  // Map tile.id → true when the tile is a forced-vertical corner piece
+  const isCornerMap = new Map<string, boolean>();
 
-  // ── Right chain: advance forward from LEFT_RESERVE ────────────────────────
-  let rightCursor = LEFT_RESERVE;
-  for (let i = anchorIdxEff; i < board.length; i++) {
-    const tile  = board[i];
-    const tileW = tile.left === tile.right ? 1 : 2;
-    rightCursor = snakeSnapForward(rightCursor, tileW, colsPerRow);
-    snakePos.set(tile.id, rightCursor);
-    rightCursor += tileW;
+  // ── Right chain: advance forward from LEFT_RESERVE (corner-aware) ─────────
+  let rightCursorFinal = LEFT_RESERVE; // exposed for ghost calculation below
+  {
+    let cursor          = LEFT_RESERVE;
+    let cornerPending   = 0;
+
+    for (let i = anchorIdxEff; i < board.length; i++) {
+      const tile     = board[i];
+      const isDouble = tile.left === tile.right;
+      const tileW    = isDouble ? 1 : 2;
+
+      // Check overflow only when not already in corner mode
+      if (cornerPending === 0) {
+        const posInRow = cursor % colsPerRow;
+        if (posInRow + tileW > colsPerRow) {
+          // Overflow → jump to corner start (posInRow = colsPerRow−2) in THIS row
+          cornerPending      = 2;
+          const rowStart     = Math.floor(cursor / colsPerRow) * colsPerRow;
+          cursor             = rowStart + (colsPerRow - 2); // V1 position
+        }
+      }
+
+      snakePos.set(tile.id, cursor);
+      const isCorner = cornerPending > 0 && !isDouble;
+      isCornerMap.set(tile.id, isCorner);
+
+      if (cornerPending > 0) {
+        cornerPending--;
+        if (cornerPending > 0) {
+          cursor += 1; // V1 → V2 (step one posInRow toward the edge)
+        } else {
+          // V2 done → move to next row, skip the 2 occupied corner cols (posInRow 0 & 1)
+          const nextRowStart = (Math.floor(cursor / colsPerRow) + 1) * colsPerRow;
+          cursor             = nextRowStart + 2;
+        }
+      } else {
+        cursor += tileW;
+      }
+    }
+    rightCursorFinal = cursor;
   }
 
   // ── Left chain: go backward from LEFT_RESERVE − 1 ────────────────────────
@@ -583,6 +617,7 @@ function computeSerpentineLayout(
     const tileW = tile.left === tile.right ? 1 : 2;
     const start = snakeSnapBackward(leftCursor, tileW, colsPerRow);
     snakePos.set(tile.id, start);
+    isCornerMap.set(tile.id, false);
     leftCursor = start - 1;
   }
 
@@ -590,7 +625,8 @@ function computeSerpentineLayout(
   const tilePositions: LinearTilePos[] = board.map(tile => {
     const sp       = snakePos.get(tile.id) ?? LEFT_RESERVE;
     const isDouble = tile.left === tile.right;
-    const layout   = snakePosToLayout(sp, isDouble, colsPerRow, PAD_H, PAD_V, ROW_STRIDE, S);
+    const isCorner = isCornerMap.get(tile.id) ?? false;
+    const layout   = snakePosToLayout(sp, isDouble, isCorner, colsPerRow, PAD_H, PAD_V, ROW_STRIDE, S);
     return { ...layout, tileId: tile.id };
   });
 
@@ -598,10 +634,18 @@ function computeSerpentineLayout(
   const ghostW = 2 * S;
   const ghostH = S;
 
-  // Right ghost: where the next right tile would go
-  const rgStart = snakeSnapForward(rightCursor, 2, colsPerRow);
+  // Right ghost: where the next right tile would go.
+  // If the cursor is at a corner-overflow position, show ghost at the corner start.
+  const rgGhostCursor = (() => {
+    const posInRow = rightCursorFinal % colsPerRow;
+    if (posInRow + 2 > colsPerRow) {
+      // Would trigger corners — show ghost at V1 column
+      return Math.floor(rightCursorFinal / colsPerRow) * colsPerRow + (colsPerRow - 2);
+    }
+    return rightCursorFinal;
+  })();
   const rightGhost: LinearGhostPos | null = board.length > 0
-    ? snakePosToGhost(rgStart, colsPerRow, PAD_H, PAD_V, ROW_STRIDE, S, ghostW, ghostH)
+    ? snakePosToGhost(rgGhostCursor, colsPerRow, PAD_H, PAD_V, ROW_STRIDE, S, ghostW, ghostH)
     : null;
 
   // Left ghost: where the next left tile would go (always in posInRow 0–1
@@ -666,20 +710,26 @@ function snakeSnapBackward(cursor: number, tileW: number, colsPerRow: number): n
  *
  * In RTL rows the snake position maps to the RIGHTMOST physical slot of the
  * tile, so the tile's pixel-left is shifted by (tileW−1) slots to the left.
+ *
+ * Corner tiles (isCorner=true) are forced-vertical non-doubles placed at the
+ * row edge when the chain wraps.  They render identically to doubles: 1 slot
+ * wide, 2×S tall, vertical orientation.
  */
 function snakePosToLayout(
   sp: number,
   isDouble: boolean,
+  isCorner: boolean,
   colsPerRow: number,
   PAD_H: number,
   PAD_V: number,
   ROW_STRIDE: number,
   S: number,
 ): LinearTilePos {
-  const row      = Math.floor(sp / colsPerRow);
-  const posInRow = sp % colsPerRow;
-  const isLTR    = row % 2 === 0;
-  const tileW    = isDouble ? 1 : 2;
+  const row        = Math.floor(sp / colsPerRow);
+  const posInRow   = sp % colsPerRow;
+  const isLTR      = row % 2 === 0;
+  const isVertical = isDouble || isCorner; // both render as 1-wide, 2S tall
+  const tileW      = isVertical ? 1 : 2;
 
   // LTR: posInRow is the leftmost slot of the tile.
   // RTL: posInRow is the rightmost slot; leftmost = colsPerRow−1−posInRow − (tileW−1).
@@ -690,10 +740,10 @@ function snakePosToLayout(
   return {
     tileId: '',   // caller overwrites via board.map
     left:    pixelLeft,
-    top:     isDouble
-      ? PAD_V + row * ROW_STRIDE        // double spans full 2×S height
+    top:     isVertical
+      ? PAD_V + row * ROW_STRIDE        // spans full 2×S height (doubles & corners)
       : PAD_V + row * ROW_STRIDE + S,  // normal tile occupies lower half
-    orientation: isDouble ? 'vertical' : 'horizontal',
+    orientation: isVertical ? 'vertical' : 'horizontal',
     swapPips: !isLTR,
   };
 }
